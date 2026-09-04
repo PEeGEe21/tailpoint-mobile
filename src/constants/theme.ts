@@ -59,6 +59,19 @@ export const Fonts = Platform.select({
   },
 });
 
+export const AppFonts = {
+  sans: 'Figtree',
+  mono: Fonts.mono,
+} as const;
+
+export const Typography = {
+  caption: { fontSize: 12, lineHeight: 16 },
+  small: { fontSize: 14, lineHeight: 20 },
+  body: { fontSize: 16, lineHeight: 24 },
+  heading: { fontSize: 24, lineHeight: 32 },
+  display: { fontSize: 40, lineHeight: 48 },
+} as const;
+
 export const Spacing = {
   half: 2,
   one: 4,

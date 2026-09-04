@@ -1,4 +1,5 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
@@ -13,16 +14,19 @@ import { useAppearanceStore } from '@/state/appearance-store';
 void SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
+  const [fontsLoaded, fontError] = useFonts({
+    Figtree: require('../../assets/fonts/Figtree-Variable.ttf'),
+  });
   const hasHydrated = useAppearanceStore((state) => state.hasHydrated);
   const colorScheme = useEffectiveColorScheme();
 
   useEffect(() => {
-    if (hasHydrated) {
+    if (hasHydrated && (fontsLoaded || fontError)) {
       void SplashScreen.hideAsync();
     }
-  }, [hasHydrated]);
+  }, [fontError, fontsLoaded, hasHydrated]);
 
-  if (!hasHydrated) {
+  if (!hasHydrated || (!fontsLoaded && !fontError)) {
     return null;
   }
 
