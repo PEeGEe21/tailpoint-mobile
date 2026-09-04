@@ -1,18 +1,41 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 
-import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
+import '@/styles.css';
+import { AppErrorBoundary } from '@/components/app-error-boundary';
+import '@/config/env';
+import { useEffectiveColorScheme } from '@/hooks/use-theme';
+import { AppProviders } from '@/providers/app-providers';
+import { useAppearanceStore } from '@/state/appearance-store';
 
-SplashScreen.preventAutoHideAsync();
+void SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
-  const colorScheme = useColorScheme();
+export default function RootLayout() {
+  const hasHydrated = useAppearanceStore((state) => state.hasHydrated);
+  const colorScheme = useEffectiveColorScheme();
+
+  useEffect(() => {
+    if (hasHydrated) {
+      void SplashScreen.hideAsync();
+    }
+  }, [hasHydrated]);
+
+  if (!hasHydrated) {
+    return null;
+  }
+
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      <AppTabs />
-    </ThemeProvider>
+    <AppErrorBoundary>
+      <AppProviders>
+        <ThemeProvider
+          value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}
+        >
+          <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+          <Stack screenOptions={{ headerShown: false }} />
+        </ThemeProvider>
+      </AppProviders>
+    </AppErrorBoundary>
   );
 }

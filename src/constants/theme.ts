@@ -3,24 +3,32 @@
  * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
  */
 
-import '@/global.css';
-
 import { Platform } from 'react-native';
 
 export const Colors = {
   light: {
-    text: '#000000',
-    background: '#ffffff',
-    backgroundElement: '#F0F0F3',
-    backgroundSelected: '#E0E1E6',
-    textSecondary: '#60646C',
+    text: '#122033',
+    background: '#F6F8FA',
+    backgroundElement: '#FFFFFF',
+    backgroundSelected: '#E4F4F3',
+    textSecondary: '#667085',
+    primary: '#008080',
+    border: '#E4E9F0',
+    success: '#14804A',
+    warning: '#D97706',
+    danger: '#D92D20',
   },
   dark: {
-    text: '#ffffff',
-    background: '#000000',
-    backgroundElement: '#212225',
-    backgroundSelected: '#2E3135',
-    textSecondary: '#B0B4BA',
+    text: '#F5F8FC',
+    background: '#0B1220',
+    backgroundElement: '#111B2E',
+    backgroundSelected: '#173C46',
+    textSecondary: '#AAB6C8',
+    primary: '#35B8B2',
+    border: '#29364B',
+    success: '#43C47B',
+    warning: '#F6B94A',
+    danger: '#FF776D',
   },
 } as const;
 
@@ -59,6 +67,14 @@ export const Spacing = {
   four: 24,
   five: 32,
   six: 64,
+} as const;
+
+export const Radius = {
+  small: 8,
+  medium: 12,
+  large: 20,
+  sheet: 24,
+  pill: 999,
 } as const;
 
 export const BottomTabInset = Platform.select({ ios: 50, android: 80 }) ?? 0;
