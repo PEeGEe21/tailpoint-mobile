@@ -18,6 +18,23 @@ npm start
 
 Set `EXPO_PUBLIC_API_URL` to a Tailpoint development API reachable from the selected device. `localhost` on a physical device refers to that device, not the development computer.
 
+### Expo Go versus development builds
+
+Use an explicit launch target:
+
+```bash
+# Physical phone using Expo Go on the same network
+npm run start:go
+
+# Expo Go when LAN discovery/reachability is unreliable
+npm run start:go:tunnel
+
+# Installed Tailpoint development client
+npm run start:dev-client
+```
+
+Because this project includes `expo-dev-client`, a plain `npm start` may target a development build. An Expo Go scan must use a server started with `--go`. Stop any existing server on port 8081 before switching modes.
+
 ## Quality checks
 
 ```bash

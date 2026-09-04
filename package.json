@@ -59,6 +59,9 @@
   },
   "scripts": {
     "start": "expo start",
+    "start:go": "expo start --go",
+    "start:go:tunnel": "expo start --go --tunnel",
+    "start:dev-client": "expo start --dev-client",
     "prepare": "husky",
     "android": "expo start --android",
     "ios": "expo start --ios",
