@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PropsWithChildren, useState } from 'react';
-
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RuntimeStateProvider } from '@/providers/runtime-state-provider';
+import { SessionBootstrapProvider } from '@/providers/session-bootstrap-provider';
 
 export function AppProviders({ children }: PropsWithChildren) {
   const [queryClient] = useState(
@@ -22,7 +23,11 @@ export function AppProviders({ children }: PropsWithChildren) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <RuntimeStateProvider>{children}</RuntimeStateProvider>
+      <SafeAreaProvider>
+        <RuntimeStateProvider>
+          <SessionBootstrapProvider>{children}</SessionBootstrapProvider>
+        </RuntimeStateProvider>
+      </SafeAreaProvider>
     </QueryClientProvider>
   );
 }
