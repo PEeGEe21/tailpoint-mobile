@@ -19,11 +19,13 @@ import { ProjectSearchBar } from '@/features/projects/project-search-bar';
 import { LIST_PROJECTS, PINNED_PROJECTS } from '@/features/projects/mock-data';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
+import { useSessionStore } from '@/auth/session-store';
 
 const ARCHIVED_COUNT = 14;
 
 export default function ProjectsScreen() {
   const theme = useTheme();
+  const organizationName = useSessionStore((state) => state.organization?.name);
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('active');
 
@@ -129,7 +131,7 @@ export default function ProjectsScreen() {
           </View>
         </View>
         <ThemedText style={styles.subtitle} themeColor="textSecondary">
-          All initiatives in Acme Studio
+          All initiatives in {organizationName ?? 'your workspace'}
         </ThemedText>
 
         <View style={styles.searchBlock}>

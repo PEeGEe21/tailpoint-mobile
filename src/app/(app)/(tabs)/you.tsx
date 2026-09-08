@@ -9,15 +9,27 @@ import { AppearanceSelector } from '@/components/appearance-selector';
 import { ThemedText } from '@/components/themed-text';
 import { Card } from '@/components/ui/primitives';
 import { Radius, Spacing } from '@/constants/theme';
-import {
-  MOCK_PROFILE_PREFERENCES,
-  MOCK_USER_PROFILE,
-} from '@/features/profile/mock-data';
+import { MOCK_PROFILE_PREFERENCES } from '@/features/profile/mock-data';
 import { useTheme } from '@/hooks/use-theme';
+import { useSessionStore } from '@/auth/session-store';
+import { useSwitchOrganization } from '@/features/organizations/mutations';
+import { clearOrganizationQueries } from '@/api/query-client';
 
 export default function YouScreen() {
   const theme = useTheme();
-  const profile = MOCK_USER_PROFILE;
+  const user = useSessionStore((state) => state.user);
+  const organization = useSessionStore((state) => state.organization);
+  const organizations = useSessionStore((state) => state.organizations);
+  const organizationRole = useSessionStore((state) => state.organizationRole);
+  const switchOrganization = useSwitchOrganization();
+  const profileName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
+    user?.email ||
+    'Tailpoint user';
+  const initials =
+    [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join('') ||
+    user?.email?.[0]?.toUpperCase() ||
+    'U';
   const [preferences, setPreferences] = useState(
     () =>
       Object.fromEntries(
@@ -26,6 +38,7 @@ export default function YouScreen() {
   );
 
   const signOut = async () => {
+    await clearOrganizationQueries(useSessionStore.getState().organizationId);
     await sessionManager.clearSession();
     router.replace('/(public)/welcome');
   };
@@ -52,19 +65,17 @@ export default function YouScreen() {
           <View style={styles.profileRow}>
             <View
               style={[styles.avatar, { backgroundColor: theme.primary }]}
-              accessibilityLabel={`${profile.name}'s avatar`}
+              accessibilityLabel={`${profileName}'s avatar`}
             >
-              <ThemedText style={styles.avatarText}>
-                {profile.initials}
-              </ThemedText>
+              <ThemedText style={styles.avatarText}>{initials}</ThemedText>
             </View>
             <View style={styles.grow}>
-              <ThemedText style={styles.name}>{profile.name}</ThemedText>
+              <ThemedText style={styles.name}>{profileName}</ThemedText>
               <ThemedText type="small" themeColor="textSecondary">
-                {profile.email}
+                {user?.email}
               </ThemedText>
               <ThemedText style={[styles.role, { color: theme.primary }]}>
-                {profile.role}
+                {organizationRole ?? 'member'}
               </ThemedText>
             </View>
           </View>
@@ -82,10 +93,10 @@ export default function YouScreen() {
           </View>
           <View style={styles.grow}>
             <ThemedText style={styles.itemTitle}>
-              {profile.organization}
+              {organization?.name ?? 'Workspace'}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Organization membership · {profile.role}
+              Organization membership · {organizationRole ?? 'member'}
             </ThemedText>
           </View>
           <MaterialIcons
@@ -94,6 +105,49 @@ export default function YouScreen() {
             size={22}
           />
         </Card>
+        {organizations.length > 1 ? (
+          <View style={styles.workspaceChoices}>
+            {organizations
+              .filter((item) => item.id !== organization?.id)
+              .map((item) => (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={switchOrganization.isPending}
+                  key={item.id}
+                  onPress={() => switchOrganization.mutate(item.id)}
+                  style={[
+                    styles.switchWorkspace,
+                    { borderColor: theme.border },
+                  ]}
+                >
+                  <View style={styles.grow}>
+                    <ThemedText type="smallBold">
+                      Switch to {item.name}
+                    </ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {item.role ?? 'member'}
+                    </ThemedText>
+                  </View>
+                  <MaterialIcons
+                    color={theme.primary}
+                    name="swap-horiz"
+                    size={20}
+                  />
+                </Pressable>
+              ))}
+            {switchOrganization.error ? (
+              <ThemedText
+                accessibilityRole="alert"
+                type="small"
+                style={{ color: theme.danger }}
+              >
+                {switchOrganization.error instanceof Error
+                  ? switchOrganization.error.message
+                  : 'Unable to switch organization.'}
+              </ThemedText>
+            ) : null}
+          </View>
+        ) : null}
 
         <SectionTitle title="Appearance" />
         <Card style={styles.sectionCard}>
@@ -212,6 +266,16 @@ const styles = StyleSheet.create({
     borderRadius: Radius.medium,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  workspaceChoices: { gap: Spacing.two },
+  switchWorkspace: {
+    minHeight: 58,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    padding: Spacing.three,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
   },
   itemTitle: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
   sectionCard: { gap: 12 },

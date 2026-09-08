@@ -12,14 +12,46 @@ import {
 } from '@/features/auth/auth-shell';
 import { useTheme } from '@/hooks/use-theme';
 
-const WORKSPACES = [
-  { id: 'primary', name: 'Your organization', role: 'Organization admin' },
-  { id: 'invited', name: 'Invited workspace', role: 'Member' },
-];
+import { useSessionStore } from '@/auth/session-store';
+import { signIn } from '@/auth/auth-api';
+import { sessionManager } from '@/auth/runtime-session';
+import { environment } from '@/config/env';
 
 export default function ChooseWorkspaceScreen() {
   const theme = useTheme();
-  const [selectedId, setSelectedId] = useState(WORKSPACES[0].id);
+  const workspaces = useSessionStore((state) => state.organizations);
+  const pendingLogin = useSessionStore((state) => state.pendingLogin);
+  const [selectedId, setSelectedId] = useState(workspaces[0]?.id ?? '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const continueToWorkspace = async () => {
+    if (!pendingLogin || !selectedId) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const result = await signIn(
+        environment.apiUrl,
+        pendingLogin.email,
+        pendingLogin.password,
+        selectedId,
+      );
+      if (result.kind !== 'authenticated')
+        throw new Error('The organization could not be selected');
+      await sessionManager.establishSession(result.tokens, result.context);
+      router.replace('/(app)/(tabs)');
+    } catch (reason) {
+      setError(
+        reason &&
+          typeof reason === 'object' &&
+          'message' in reason &&
+          typeof reason.message === 'string'
+          ? reason.message
+          : 'Unable to select this organization.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <AuthShell
@@ -27,14 +59,17 @@ export default function ChooseWorkspaceScreen() {
       footer={
         <AuthLink
           label="Use a different account"
-          onPress={() => router.replace('/(public)/sign-in')}
+          onPress={() => {
+            useSessionStore.getState().clear();
+            router.replace('/(public)/sign-in');
+          }}
         />
       }
       subtitle="Choose where you want to start. You can switch organizations later."
       title="Select a workspace"
     >
       <View style={styles.list}>
-        {WORKSPACES.map((workspace) => {
+        {workspaces.map((workspace) => {
           const selected = selectedId === workspace.id;
           return (
             <Pressable
@@ -78,7 +113,7 @@ export default function ChooseWorkspaceScreen() {
                   <View style={styles.workspaceText}>
                     <ThemedText type="smallBold">{workspace.name}</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {workspace.role}
+                      {workspace.role ?? 'member'}
                     </ThemedText>
                   </View>
                 </View>
@@ -88,9 +123,19 @@ export default function ChooseWorkspaceScreen() {
           );
         })}
       </View>
+      {error ? (
+        <ThemedText
+          accessibilityRole="alert"
+          type="small"
+          style={{ color: theme.danger }}
+        >
+          {error}
+        </ThemedText>
+      ) : null}
       <AuthPrimaryButton
-        label="Continue to Tailpoint"
-        onPress={() => router.replace('/(app)/(tabs)')}
+        disabled={!selectedId || submitting}
+        label={submitting ? 'Opening workspace…' : 'Continue to Tailpoint'}
+        onPress={() => void continueToWorkspace()}
       />
     </AuthShell>
   );

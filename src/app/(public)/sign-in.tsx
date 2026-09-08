@@ -2,9 +2,8 @@ import { StyleSheet, View } from 'react-native';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ShieldCheck } from 'lucide-react-native';
 import { router } from 'expo-router';
-import { useForm, useWatch } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 
-import { Choice } from '@/components/ui/primitives';
 import { ThemedText } from '@/components/themed-text';
 import {
   AuthFooter,
@@ -16,24 +15,60 @@ import { FormField, PasswordFormField } from '@/features/auth/form-field';
 import { signInSchema, type SignInForm } from '@/features/auth/schemas';
 import { Radius, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
+import { signIn } from '@/auth/auth-api';
+import { sessionManager } from '@/auth/runtime-session';
+import { useSessionStore } from '@/auth/session-store';
+import { environment } from '@/config/env';
+import { useState } from 'react';
 
 const DEFAULT_VALUES: SignInForm = {
   email: '',
   password: '',
-  trustDevice: true,
 };
 
 export default function SignInScreen() {
   const theme = useTheme();
-  const { control, handleSubmit, setValue } = useForm<SignInForm>({
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const {
+    control,
+    handleSubmit,
+    formState: { isSubmitting },
+  } = useForm<SignInForm>({
     defaultValues: DEFAULT_VALUES,
     resolver: zodResolver(signInSchema),
     mode: 'onTouched',
   });
-  const trustDevice = useWatch({ control, name: 'trustDevice' });
-  const submit = handleSubmit(() => {
-    // Local-only handoff until API integration is enabled.
-    router.replace('/(onboarding)/choose-workspace');
+  const submit = handleSubmit(async (values) => {
+    setSubmitError(null);
+    try {
+      const result = await signIn(
+        environment.apiUrl,
+        values.email,
+        values.password,
+      );
+      if (result.kind === 'organization-selection') {
+        useSessionStore.getState().beginOrganizationSelection(
+          {
+            email: values.email.trim().toLowerCase(),
+            password: values.password,
+          },
+          result.organizations,
+        );
+        router.replace('/(onboarding)/choose-workspace');
+        return;
+      }
+      await sessionManager.establishSession(result.tokens, result.context);
+      router.replace('/(app)/(tabs)');
+    } catch (error) {
+      setSubmitError(
+        error &&
+          typeof error === 'object' &&
+          'message' in error &&
+          typeof error.message === 'string'
+          ? error.message
+          : 'Unable to sign in. Check your connection and try again.',
+      );
+    }
   });
 
   return (
@@ -82,13 +117,20 @@ export default function SignInScreen() {
         />
       </View>
 
-      <Choice
-        checked={trustDevice}
-        label="Trust this device for 30 days"
-        onPress={() => setValue('trustDevice', !trustDevice)}
+      {submitError ? (
+        <ThemedText
+          accessibilityRole="alert"
+          type="small"
+          style={{ color: theme.danger }}
+        >
+          {submitError}
+        </ThemedText>
+      ) : null}
+      <AuthPrimaryButton
+        disabled={isSubmitting}
+        label={isSubmitting ? 'Signing in…' : 'Sign in'}
+        onPress={() => void submit()}
       />
-
-      <AuthPrimaryButton label="Sign in" onPress={() => void submit()} />
 
       {/* <View style={styles.dividerRow}>
         <View style={[styles.divider, { backgroundColor: theme.border }]} />

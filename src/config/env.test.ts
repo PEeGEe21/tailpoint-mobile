@@ -13,4 +13,13 @@ describe('public environment', () => {
       parsePublicEnvironment({ EXPO_PUBLIC_API_URL: 'not-a-url' }),
     ).toThrow();
   });
+
+  it('rejects a local or insecure production backend', () => {
+    expect(() =>
+      parsePublicEnvironment({
+        EXPO_PUBLIC_APP_ENV: 'production',
+        EXPO_PUBLIC_API_URL: 'http://localhost:3000',
+      }),
+    ).toThrow();
+  });
 });

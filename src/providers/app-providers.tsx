@@ -1,26 +1,11 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PropsWithChildren, useState } from 'react';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { PropsWithChildren } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RuntimeStateProvider } from '@/providers/runtime-state-provider';
 import { SessionBootstrapProvider } from '@/providers/session-bootstrap-provider';
+import { queryClient } from '@/api/query-client';
 
 export function AppProviders({ children }: PropsWithChildren) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            retry: 1,
-            staleTime: 30_000,
-            refetchOnWindowFocus: false,
-          },
-          mutations: {
-            retry: false,
-          },
-        },
-      }),
-  );
-
   return (
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider>

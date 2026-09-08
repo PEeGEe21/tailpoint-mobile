@@ -1,13 +1,4 @@
-import type { ProfilePreference, UserProfile } from './types';
-
-export const MOCK_USER_PROFILE: UserProfile = {
-  id: 'user-1',
-  name: 'Jordan Davis',
-  email: 'jordan@acmestudio.com',
-  initials: 'JD',
-  role: 'member',
-  organization: 'Acme Studio',
-};
+import type { ProfilePreference } from './types';
 
 export const MOCK_PROFILE_PREFERENCES: ProfilePreference[] = [
   {

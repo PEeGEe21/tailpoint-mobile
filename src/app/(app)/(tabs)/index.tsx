@@ -16,10 +16,12 @@ import {
 } from '@/features/home/mock-data';
 import { useTaskStore } from '@/features/tasks/task-store';
 import { PROJECT_WORKFLOW_STATUSES } from '@/features/tasks/mock-data';
-import { MOCK_USER_PROFILE } from '@/features/profile/mock-data';
+import { useSessionStore } from '@/auth/session-store';
 
 export default function HomeScreen() {
   const theme = useTheme();
+  const user = useSessionStore((state) => state.user);
+  const organization = useSessionStore((state) => state.organization);
   const [activeBucket, setActiveBucket] = useState<TaskBucket>('today');
   const storedTasks = useTaskStore((state) => state.tasks);
   const setTaskStatus = useTaskStore((state) => state.setStatus);
@@ -126,7 +128,7 @@ export default function HomeScreen() {
               style={[styles.workspaceDot, { backgroundColor: theme.accent }]}
             />
             <ThemedText style={styles.workspaceLabel}>
-              {MOCK_USER_PROFILE.organization}
+              {organization?.name ?? 'Workspace'}
             </ThemedText>
           </View>
           <View style={styles.heroIcon}>
@@ -136,7 +138,8 @@ export default function HomeScreen() {
         <View style={styles.heroCopy}>
           <ThemedText style={styles.heroEyebrow}>YOUR FOCUS TODAY</ThemedText>
           <ThemedText style={styles.greeting}>
-            Good morning, {MOCK_USER_PROFILE.name.split(' ')[0]}
+            Good morning,{' '}
+            {user?.firstName ?? user?.email.split('@')[0] ?? 'there'}
           </ThemedText>
           <ThemedText style={styles.greetingSubtitle}>
             {visibleTasks.length} tasks are ready to move. Start with the work

@@ -20,6 +20,22 @@ Set `EXPO_PUBLIC_API_URL` to the Tailpoint API origin, without the `/api` suffix
 and ensure it is reachable from the selected device. `localhost` on a physical
 device refers to that device, not the development computer.
 
+### Backend environments
+
+Only public routing configuration belongs in the mobile environment. Never add ingestion keys, JWT secrets, database credentials, or provider secrets to an `EXPO_PUBLIC_*` variable; Expo embeds those values in the application bundle.
+
+| Build                       | `EXPO_PUBLIC_APP_ENV` | `EXPO_PUBLIC_API_URL`                      |
+| --------------------------- | --------------------- | ------------------------------------------ |
+| Local iOS/web               | `development`         | `http://localhost:3000`                    |
+| Local Android emulator      | `development`         | `http://10.0.2.2:3000`                     |
+| Physical development device | `development`         | `http://<development-machine-lan-ip>:3000` |
+| Preview                     | `preview`             | HTTPS preview API origin                   |
+| Production                  | `production`          | HTTPS production API origin                |
+
+Configure preview and production values in their matching EAS environments referenced by `eas.json`. Production configuration is validated at startup and rejects local or non-HTTPS API origins. The URL must be the backend origin without `/api`; for example, `https://api.example.com`, not `https://api.example.com/api`.
+
+Project ingestion keys belong only in server-side automation or SDK clients. The mobile app authenticates with a user access token and rotating refresh token and must not receive an ingestion key.
+
 ### Expo Go versus development builds
 
 Use an explicit launch target:

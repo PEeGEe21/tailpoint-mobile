@@ -5,16 +5,19 @@
       "developmentClient": true,
       "distribution": "internal",
       "environment": "development",
+      "env": { "EXPO_PUBLIC_APP_ENV": "development" },
       "node": "22.13.0"
     },
     "preview": {
       "distribution": "internal",
       "environment": "preview",
+      "env": { "EXPO_PUBLIC_APP_ENV": "preview" },
       "node": "22.13.0"
     },
     "production": {
       "autoIncrement": true,
       "environment": "production",
+      "env": { "EXPO_PUBLIC_APP_ENV": "production" },
       "node": "22.13.0"
     }
   },

@@ -59,7 +59,6 @@ export const passwordRecoverySchema = z
 export const signInSchema = z.object({
   email,
   password: z.string().min(1, 'Password is required'),
-  trustDevice: z.boolean(),
 });
 
 export type CreateOrganizationForm = z.infer<typeof createOrganizationSchema>;
