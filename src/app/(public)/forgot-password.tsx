@@ -15,13 +15,25 @@ import {
   passwordRecoverySchema,
   type PasswordRecoveryForm,
 } from '@/features/auth/schemas';
+import {
+  requestPasswordReset,
+  resetPassword,
+  verifyPasswordResetCode,
+} from '@/auth/auth-api';
+import { environment } from '@/config/env';
+import { ThemedText } from '@/components/themed-text';
+import { useTheme } from '@/hooks/use-theme';
 
 type Step = 'request' | 'verify' | 'reset';
 const STEP_NUMBER: Record<Step, number> = { request: 1, verify: 2, reset: 3 };
 
 export default function ForgotPasswordScreen() {
+  const theme = useTheme();
   const [step, setStep] = useState<Step>('request');
-  const { control, handleSubmit, trigger, setValue } =
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const { control, getValues, handleSubmit, trigger, setValue } =
     useForm<PasswordRecoveryForm>({
       defaultValues: { email: '', code: '', password: '', confirmPassword: '' },
       resolver: zodResolver(passwordRecoverySchema),
@@ -29,15 +41,68 @@ export default function ForgotPasswordScreen() {
     });
   const email = useWatch({ control, name: 'email' });
   const advance = async () => {
+    setSubmitError(null);
+    setMessage(null);
     if (step === 'request') {
-      if (await trigger('email')) setStep('verify');
+      if (!(await trigger('email'))) return;
+      setPending(true);
+      try {
+        const result = await requestPasswordReset(environment.apiUrl, email);
+        setMessage(result.message);
+        setStep('verify');
+      } catch (error) {
+        setSubmitError(
+          errorMessage(error, 'Unable to request a verification code.'),
+        );
+      } finally {
+        setPending(false);
+      }
       return;
     }
     if (step === 'verify') {
-      if (await trigger('code')) setStep('reset');
+      if (!(await trigger('code'))) return;
+      setPending(true);
+      try {
+        const values = getValues();
+        await verifyPasswordResetCode(
+          environment.apiUrl,
+          values.email,
+          values.code,
+        );
+        setStep('reset');
+      } catch (error) {
+        setSubmitError(
+          errorMessage(error, 'The verification code could not be confirmed.'),
+        );
+      } finally {
+        setPending(false);
+      }
       return;
     }
-    await handleSubmit(() => router.replace('/(public)/sign-in'))();
+    await handleSubmit(async (values) => {
+      setPending(true);
+      try {
+        await resetPassword(environment.apiUrl, values.email, values.password);
+        router.replace('/(public)/sign-in');
+      } catch (error) {
+        setSubmitError(errorMessage(error, 'Unable to reset your password.'));
+      } finally {
+        setPending(false);
+      }
+    })();
+  };
+  const resend = async () => {
+    setValue('code', '');
+    setSubmitError(null);
+    setPending(true);
+    try {
+      const result = await requestPasswordReset(environment.apiUrl, email);
+      setMessage(result.message);
+    } catch (error) {
+      setSubmitError(errorMessage(error, 'Unable to send a new code.'));
+    } finally {
+      setPending(false);
+    }
   };
   const title =
     step === 'request'
@@ -89,10 +154,7 @@ export default function ForgotPasswordScreen() {
             normalize={(value) => value.replace(/\D/g, '')}
             onSubmitEditing={() => void advance()}
           />
-          <AuthLink
-            label="Send a new code"
-            onPress={() => setValue('code', '')}
-          />
+          <AuthLink label="Send a new code" onPress={() => void resend()} />
         </>
       ) : null}
       {step === 'reset' ? (
@@ -113,16 +175,42 @@ export default function ForgotPasswordScreen() {
           />
         </>
       ) : null}
+      {message ? (
+        <ThemedText type="small" style={{ color: theme.success }}>
+          {message}
+        </ThemedText>
+      ) : null}
+      {submitError ? (
+        <ThemedText
+          accessibilityRole="alert"
+          type="small"
+          style={{ color: theme.danger }}
+        >
+          {submitError}
+        </ThemedText>
+      ) : null}
       <AuthPrimaryButton
+        disabled={pending}
         label={
-          step === 'request'
-            ? 'Send verification code'
-            : step === 'verify'
-              ? 'Verify code'
-              : 'Reset password'
+          pending
+            ? 'Please wait…'
+            : step === 'request'
+              ? 'Send verification code'
+              : step === 'verify'
+                ? 'Verify code'
+                : 'Reset password'
         }
         onPress={() => void advance()}
       />
     </AuthShell>
   );
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  return error &&
+    typeof error === 'object' &&
+    'message' in error &&
+    typeof error.message === 'string'
+    ? error.message
+    : fallback;
 }

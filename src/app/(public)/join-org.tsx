@@ -14,10 +14,23 @@ import {
   joinOrganizationSchema,
   type JoinOrganizationForm,
 } from '@/features/auth/schemas';
+import { joinOrganizationAccount, validateInvitation } from '@/auth/auth-api';
+import { sessionManager } from '@/auth/runtime-session';
+import { environment } from '@/config/env';
+import { ThemedText } from '@/components/themed-text';
+import { useTheme } from '@/hooks/use-theme';
+import { useState } from 'react';
 
 export default function JoinOrgScreen() {
+  const theme = useTheme();
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const params = useLocalSearchParams<{ code?: string; token?: string }>();
-  const { control, handleSubmit, setValue } = useForm<JoinOrganizationForm>({
+  const {
+    control,
+    handleSubmit,
+    setValue,
+    formState: { isSubmitting },
+  } = useForm<JoinOrganizationForm>({
     defaultValues: {
       inviteMode: params.token ? 'token' : 'code',
       inviteCode: params.code ?? '',
@@ -35,9 +48,40 @@ export default function JoinOrgScreen() {
     setValue('inviteMode', next);
     setValue(next === 'code' ? 'inviteToken' : 'inviteCode', '');
   };
-  const submit = handleSubmit(() =>
-    router.replace('/(onboarding)/choose-workspace'),
-  );
+  const submit = handleSubmit(async (values) => {
+    setSubmitError(null);
+    try {
+      const credential =
+        values.inviteMode === 'code'
+          ? { code: values.inviteCode.trim() }
+          : { token: values.inviteToken.trim() };
+      const invitation = await validateInvitation(
+        environment.apiUrl,
+        credential,
+      );
+      if (invitation.email.toLowerCase() !== values.email.trim().toLowerCase())
+        throw new Error(`This invitation was issued to ${invitation.email}.`);
+      const result = await joinOrganizationAccount(environment.apiUrl, {
+        email: values.email,
+        password: values.password,
+        firstName: values.firstName,
+        lastName: values.lastName,
+        inviteCode: credential.code,
+        inviteToken: credential.token,
+      });
+      await sessionManager.establishSession(result.tokens, result.context);
+      router.replace('/(app)/(tabs)');
+    } catch (error) {
+      setSubmitError(
+        error &&
+          typeof error === 'object' &&
+          'message' in error &&
+          typeof error.message === 'string'
+          ? error.message
+          : 'Unable to accept this invitation.',
+      );
+    }
+  });
 
   return (
     <AuthShell
@@ -116,8 +160,18 @@ export default function JoinOrgScreen() {
         label="Create password"
         onSubmitEditing={() => void submit()}
       />
+      {submitError ? (
+        <ThemedText
+          accessibilityRole="alert"
+          type="small"
+          style={{ color: theme.danger }}
+        >
+          {submitError}
+        </ThemedText>
+      ) : null}
       <AuthPrimaryButton
-        label="Accept invitation"
+        disabled={isSubmitting}
+        label={isSubmitting ? 'Joining organization…' : 'Accept invitation'}
         onPress={() => void submit()}
       />
     </AuthShell>

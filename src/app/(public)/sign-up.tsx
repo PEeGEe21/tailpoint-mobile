@@ -16,6 +16,10 @@ import {
   createOrganizationSchema,
   type CreateOrganizationForm,
 } from '@/features/auth/schemas';
+import { createOrganizationAccount } from '@/auth/auth-api';
+import { sessionManager } from '@/auth/runtime-session';
+import { environment } from '@/config/env';
+import { useTheme } from '@/hooks/use-theme';
 
 const DEFAULT_VALUES: CreateOrganizationForm = {
   email: '',
@@ -27,8 +31,15 @@ const DEFAULT_VALUES: CreateOrganizationForm = {
 };
 
 export default function SignUpScreen() {
+  const theme = useTheme();
   const [step, setStep] = useState<1 | 2>(1);
-  const { control, handleSubmit, trigger } = useForm<CreateOrganizationForm>({
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const {
+    control,
+    handleSubmit,
+    trigger,
+    formState: { isSubmitting },
+  } = useForm<CreateOrganizationForm>({
     defaultValues: DEFAULT_VALUES,
     resolver: zodResolver(createOrganizationSchema),
     mode: 'onTouched',
@@ -45,9 +56,26 @@ export default function SignUpScreen() {
     )
       setStep(2);
   };
-  const finish = handleSubmit(() =>
-    router.replace('/(onboarding)/choose-workspace'),
-  );
+  const finish = handleSubmit(async (values) => {
+    setSubmitError(null);
+    try {
+      const result = await createOrganizationAccount(
+        environment.apiUrl,
+        values,
+      );
+      await sessionManager.establishSession(result.tokens, result.context);
+      router.replace('/(app)/(tabs)');
+    } catch (error) {
+      setSubmitError(
+        error &&
+          typeof error === 'object' &&
+          'message' in error &&
+          typeof error.message === 'string'
+          ? error.message
+          : 'Unable to create your organization.',
+      );
+    }
+  });
 
   return (
     <AuthShell
@@ -134,8 +162,20 @@ export default function SignUpScreen() {
             This creates your organization and assigns you the organization
             administrator role.
           </ThemedText>
+          {submitError ? (
+            <ThemedText
+              accessibilityRole="alert"
+              type="small"
+              style={{ color: theme.danger }}
+            >
+              {submitError}
+            </ThemedText>
+          ) : null}
           <AuthPrimaryButton
-            label="Create organization"
+            disabled={isSubmitting}
+            label={
+              isSubmitting ? 'Creating organization…' : 'Create organization'
+            }
             onPress={() => void finish()}
           />
           <AuthLink
