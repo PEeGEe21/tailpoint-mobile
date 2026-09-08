@@ -10,8 +10,17 @@ const STATUS_META: Record<
   PinnedProjectStatus,
   { color: string; label: string }
 > = {
-  'on-track': { color: '#14804A', label: 'On Track' },
-  attention: { color: '#D97706', label: 'Attention needed' },
+  active: { color: '#14804A', label: 'Active' },
+  upcoming: { color: '#006399', label: 'Upcoming' },
+  in_progress: { color: '#006399', label: 'In progress' },
+  inactive: { color: '#667085', label: 'Inactive' },
+  completed: { color: '#14804A', label: 'Completed' },
+  cancelled: { color: '#D92D20', label: 'Cancelled' },
+  on_hold: { color: '#D97706', label: 'On hold' },
+  paused: { color: '#667085', label: 'Paused' },
+  on_review: { color: '#7F56D9', label: 'In review' },
+  overdue: { color: '#D92D20', label: 'Overdue' },
+  draft: { color: '#667085', label: 'Draft' },
 };
 
 interface PinnedProjectCardProps {
@@ -56,6 +65,26 @@ export function PinnedProjectCard({
               {status.label}
             </ThemedText>
           </View>
+          {project.health ? (
+            <ThemedText
+              style={[
+                styles.healthLabel,
+                {
+                  color:
+                    project.health === 'healthy'
+                      ? theme.success
+                      : theme.warning,
+                },
+              ]}
+            >
+              {project.health === 'healthy'
+                ? 'Healthy'
+                : project.health === 'blocked'
+                  ? 'Blocked'
+                  : 'At risk'}{' '}
+              health
+            </ThemedText>
+          ) : null}
         </View>
         <Pressable
           accessibilityLabel="Project actions"
@@ -236,6 +265,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
   },
+  healthLabel: { fontSize: 11, fontWeight: '600' },
   moreButton: {
     width: 32,
     height: 32,

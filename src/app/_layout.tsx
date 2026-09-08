@@ -12,6 +12,7 @@ import { AppProviders } from '@/providers/app-providers';
 import { useAppearanceStore } from '@/state/appearance-store';
 
 void SplashScreen.preventAutoHideAsync();
+SplashScreen.setOptions({ duration: 450, fade: true });
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({

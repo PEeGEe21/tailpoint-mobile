@@ -20,7 +20,15 @@ describe('UI primitive accessibility', () => {
   it('exposes checked state for choices', () => {
     render(<Choice checked label="Notify members" onPress={jest.fn()} />);
 
-    expect(screen.getByRole('checkbox', { checked: true })).toBeOnTheScreen();
+    const choice = screen.getByRole('checkbox', { checked: true });
+    expect(choice).toBeOnTheScreen();
+    expect(
+      Array.isArray(choice.props.children)
+        ? choice.props.children.some(
+            (child: unknown) => typeof child === 'string',
+          )
+        : typeof choice.props.children === 'string',
+    ).toBe(false);
   });
 
   it('clamps and announces progress as a percentage', () => {

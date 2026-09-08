@@ -4,6 +4,7 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   TextInput,
   View,
 } from 'react-native';
@@ -113,16 +114,35 @@ export function AlertDialog({
   );
 }
 
-export function Toast({ message }: { message: string }) {
+export function Toast({
+  message,
+  variant = 'error',
+}: {
+  message: string;
+  variant?: 'error' | 'success' | 'neutral';
+}) {
   const theme = useTheme();
+  const backgroundColor =
+    variant === 'error'
+      ? theme.danger
+      : variant === 'success'
+        ? theme.success
+        : theme.text;
+  const color =
+    variant === 'error'
+      ? theme.onDanger
+      : variant === 'success'
+        ? '#FFFFFF'
+        : theme.background;
+
   return (
     <View
+      accessible
+      accessibilityRole={variant === 'error' ? 'alert' : undefined}
       accessibilityLiveRegion="polite"
-      style={[styles.toast, { backgroundColor: theme.text }]}
+      style={[styles.toast, { backgroundColor }]}
     >
-      <ThemedText type="smallBold" style={{ color: theme.background }}>
-        {message}
-      </ThemedText>
+      <Text style={[styles.toastMessage, { color }]}>{message}</Text>
     </View>
   );
 }
@@ -284,7 +304,15 @@ const styles = StyleSheet.create({
     bottom: 40,
     borderRadius: Radius.medium,
     padding: Spacing.three,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    elevation: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
+  toastMessage: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
   select: {
     minHeight: 48,
     justifyContent: 'center',

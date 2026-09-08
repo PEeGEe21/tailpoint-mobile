@@ -6,9 +6,17 @@ import type { ProjectListItem, ProjectRowStatus } from './types';
 export type { ProjectListItem, ProjectRowStatus } from './types';
 
 const STATUS_STYLE: Record<ProjectRowStatus, { bg: string; text: string }> = {
-  'on-track': { bg: '#14804A1A', text: '#14804A' },
-  review: { bg: '#0063991A', text: '#006399' },
+  active: { bg: '#14804A1A', text: '#14804A' },
+  upcoming: { bg: '#0063991A', text: '#006399' },
+  in_progress: { bg: '#0063991A', text: '#006399' },
+  inactive: { bg: '#8A94A61A', text: '#667085' },
+  completed: { bg: '#14804A1A', text: '#14804A' },
+  cancelled: { bg: '#D92D201A', text: '#D92D20' },
+  on_hold: { bg: '#D977061A', text: '#D97706' },
   paused: { bg: '#8A94A61A', text: '#667085' },
+  on_review: { bg: '#7F56D91A', text: '#7F56D9' },
+  overdue: { bg: '#D92D201A', text: '#D92D20' },
+  draft: { bg: '#8A94A61A', text: '#667085' },
 };
 
 interface ProjectListRowProps {
@@ -60,10 +68,11 @@ export function ProjectListRow({ item, onPress }: ProjectListRowProps) {
               styles.progressFill,
               {
                 width: `${item.progressPercent}%`,
-                backgroundColor:
-                  item.status === 'paused'
-                    ? theme.textSecondary
-                    : theme.primary,
+                backgroundColor: ['paused', 'inactive', 'cancelled'].includes(
+                  item.status,
+                )
+                  ? theme.textSecondary
+                  : theme.primary,
               },
             ]}
           />

@@ -6,9 +6,11 @@ import type { ProjectItem, ProjectStatus } from './types';
 export type { ProjectAvatar, ProjectItem, ProjectStatus } from './types';
 
 const STATUS_META: Record<ProjectStatus, { color: string; label: string }> = {
-  'on-track': { color: '#14804A', label: 'On track' },
-  attention: { color: '#D97706', label: 'Attention needed' },
-  'off-track': { color: '#D92D20', label: 'Off track' },
+  active: { color: '#14804A', label: 'Active' },
+  in_progress: { color: '#006399', label: 'In progress' },
+  on_review: { color: '#7F56D9', label: 'In review' },
+  paused: { color: '#667085', label: 'Paused' },
+  completed: { color: '#14804A', label: 'Completed' },
 };
 
 interface ProjectCardProps {
@@ -39,6 +41,24 @@ export function ProjectCard({ item, onPress }: ProjectCardProps) {
           <ThemedText style={styles.subtitle} themeColor="textSecondary">
             {item.subtitle}
           </ThemedText>
+          {item.health ? (
+            <ThemedText
+              style={[
+                styles.health,
+                {
+                  color:
+                    item.health === 'healthy' ? theme.success : theme.warning,
+                },
+              ]}
+            >
+              {item.health === 'healthy'
+                ? 'Healthy'
+                : item.health === 'at_risk'
+                  ? 'At risk'
+                  : 'Blocked'}{' '}
+              health
+            </ThemedText>
+          ) : null}
         </View>
         <View
           style={[styles.statusPill, { backgroundColor: `${status.color}1A` }]}
@@ -146,6 +166,7 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 12,
   },
+  health: { fontSize: 11, fontWeight: '600' },
   statusPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,

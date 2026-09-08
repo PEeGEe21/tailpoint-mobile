@@ -5,6 +5,7 @@ import {
   PressableProps,
   StyleSheet,
   Switch as NativeSwitch,
+  Text,
   TextInput,
   TextInputProps,
   View,
@@ -34,7 +35,7 @@ export function Button({
       ]}
       {...props}
     >
-      <ThemedText style={styles.buttonText}>{children}</ThemedText>
+      <Text style={styles.buttonText}>{children}</Text>
     </Pressable>
   );
 }
@@ -63,25 +64,34 @@ export function IconButton({
 export function Field({
   error,
   label,
+  rightElement,
   ...props
-}: TextInputProps & { error?: string; label: string }) {
+}: TextInputProps & {
+  error?: string;
+  label: string;
+  rightElement?: ReactNode;
+}) {
   const theme = useTheme();
   return (
     <View style={styles.field}>
       <ThemedText type="smallBold">{label}</ThemedText>
-      <TextInput
-        accessibilityLabel={label}
-        placeholderTextColor={theme.textSecondary}
+      <View
         style={[
-          styles.input,
+          styles.inputFrame,
           {
             borderColor: error ? theme.danger : theme.border,
-            color: theme.text,
             backgroundColor: theme.backgroundElement,
           },
         ]}
-        {...props}
-      />
+      >
+        <TextInput
+          accessibilityLabel={label}
+          placeholderTextColor={theme.textSecondary}
+          style={[styles.input, { color: theme.text }]}
+          {...props}
+        />
+        {rightElement}
+      </View>
       {error ? (
         <ThemedText style={{ color: theme.danger }} type="small">
           {error}
@@ -118,7 +128,7 @@ export function Choice({
             backgroundColor: checked ? theme.primary : 'transparent',
           },
         ]}
-      />{' '}
+      />
       <ThemedText>{label}</ThemedText>
     </Pressable>
   );
@@ -288,13 +298,21 @@ export function Spinner() {
 
 const styles = StyleSheet.create({
   button: {
+    width: '100%',
     minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: Radius.medium,
     paddingHorizontal: Spacing.three,
   },
-  buttonText: { color: '#FFFFFF', fontWeight: '700' },
+  buttonText: {
+    color: '#FFFFFF',
+    fontFamily: 'Figtree',
+    fontSize: 16,
+    lineHeight: 22,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   iconButton: {
     width: 44,
     height: 44,
@@ -304,10 +322,17 @@ const styles = StyleSheet.create({
     borderRadius: Radius.medium,
   },
   field: { gap: Spacing.one },
-  input: {
+  inputFrame: {
     minHeight: 48,
     borderWidth: 1,
     borderRadius: Radius.medium,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+  },
+  input: {
+    flex: 1,
+    minHeight: 46,
     paddingHorizontal: Spacing.three,
     fontSize: 16,
   },

@@ -3,10 +3,11 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
-import type { TaskItem, TaskPriority } from './types';
-export type { TaskBucket, TaskItem, TaskPriority } from './types';
+import type { TaskItem } from './types';
+export type { TaskBucket, TaskItem } from './types';
 
-const PRIORITY_COLOR: Record<TaskPriority, string> = {
+const SEVERITY_COLOR = {
+  critical: '#B42318',
   high: '#D92D20',
   medium: '#D97706',
   low: '#14804A',
@@ -14,13 +15,21 @@ const PRIORITY_COLOR: Record<TaskPriority, string> = {
 
 interface TaskCardProps {
   item: TaskItem;
-  onToggleComplete: (id: string) => void;
-  onResolve?: (id: string) => void;
+  onPress?: (id: number) => void;
+  onToggleComplete: (id: number) => void;
+  onResolve?: (id: number) => void;
 }
 
-export function TaskCard({ item, onToggleComplete, onResolve }: TaskCardProps) {
+export function TaskCard({
+  item,
+  onPress,
+  onToggleComplete,
+  onResolve,
+}: TaskCardProps) {
   const theme = useTheme();
-  const priorityColor = PRIORITY_COLOR[item.priority];
+  const severityColor = item.severity
+    ? SEVERITY_COLOR[item.severity]
+    : theme.textSecondary;
 
   return (
     <View
@@ -51,7 +60,7 @@ export function TaskCard({ item, onToggleComplete, onResolve }: TaskCardProps) {
           ) : null}
         </Pressable>
 
-        <View style={styles.content}>
+        <Pressable onPress={() => onPress?.(item.id)} style={styles.content}>
           <View style={styles.tagRow}>
             <View
               style={[
@@ -92,7 +101,7 @@ export function TaskCard({ item, onToggleComplete, onResolve }: TaskCardProps) {
           >
             {item.title}
           </ThemedText>
-        </View>
+        </Pressable>
       </View>
 
       <View style={[styles.footer, { borderTopColor: theme.border }]}>
@@ -106,12 +115,17 @@ export function TaskCard({ item, onToggleComplete, onResolve }: TaskCardProps) {
         ) : (
           <View style={styles.dueRow}>
             <View
-              style={[styles.priorityDot, { backgroundColor: priorityColor }]}
+              style={[styles.priorityDot, { backgroundColor: severityColor }]}
             />
             <ThemedText
-              style={[styles.priorityLabel, { color: priorityColor }]}
+              style={[styles.priorityLabel, { color: severityColor }]}
             >
-              {item.priority[0].toUpperCase() + item.priority.slice(1)}
+              {item.severity
+                ? `${item.severity[0].toUpperCase()}${item.severity.slice(1)} severity`
+                : 'No severity'}
+            </ThemedText>
+            <ThemedText style={styles.dueSeparator} themeColor="textSecondary">
+              P{item.priority}
             </ThemedText>
             <ThemedText style={styles.dueSeparator} themeColor="textSecondary">
               &bull;

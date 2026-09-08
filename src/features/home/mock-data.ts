@@ -1,4 +1,4 @@
-import type { AttentionItem, ProjectItem, TaskBucket, TaskItem } from './types';
+import type { AttentionItem, ProjectItem, TaskBucket } from './types';
 
 export const ATTENTION_ITEMS: AttentionItem[] = [
   {
@@ -30,58 +30,13 @@ export const ATTENTION_ITEMS: AttentionItem[] = [
   },
 ];
 
-export const TASK_ITEMS: TaskItem[] = [
-  {
-    id: 'task-1',
-    bucket: 'today',
-    category: 'Core Platform',
-    title: 'Review FIDO2 WebAuthn payload format',
-    priority: 'high',
-    dueLabel: 'Today, 2:00 PM',
-    blockedBy: '#304',
-  },
-  {
-    id: 'task-2',
-    bucket: 'today',
-    category: 'Mobile Companion',
-    title: 'Finalize mobile onboarding copy',
-    priority: 'medium',
-    dueLabel: 'Today, 5:30 PM',
-    checklist: { done: 2, total: 2 },
-  },
-  {
-    id: 'task-3',
-    bucket: 'today',
-    category: 'Core Platform',
-    title: 'Merge organization switcher cache isolation patch',
-    priority: 'high',
-    dueLabel: 'Yesterday',
-    overdue: true,
-  },
-  {
-    id: 'task-4',
-    bucket: 'upcoming',
-    category: 'Mobile Companion',
-    title: 'Wire push-notification permission prompt',
-    priority: 'medium',
-    dueLabel: 'Tomorrow, 10:00 AM',
-  },
-  {
-    id: 'task-5',
-    bucket: 'later',
-    category: 'Core Platform',
-    title: 'Draft audit-trail schema proposal',
-    priority: 'low',
-    dueLabel: 'Next week',
-  },
-];
-
 export const PROJECT_ITEMS: ProjectItem[] = [
   {
     id: 'proj-1',
     name: 'Mobile Companion',
     subtitle: 'Q3 core initiative',
-    status: 'on-track',
+    status: 'in_progress',
+    health: 'healthy',
     progressLabel: 'Progress (12/18 tasks done)',
     progressPercent: 68,
     avatars: [
@@ -96,7 +51,8 @@ export const PROJECT_ITEMS: ProjectItem[] = [
     id: 'proj-2',
     name: 'Core Platform v2',
     subtitle: 'Enterprise architecture migration',
-    status: 'attention',
+    status: 'active',
+    health: 'at_risk',
     progressLabel: 'Progress (27/32 tasks done)',
     progressPercent: 84,
     avatars: [

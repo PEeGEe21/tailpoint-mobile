@@ -67,6 +67,7 @@ export default function TabsLayout() {
             ),
           }}
         />
+        <Tabs.Screen name="tasks" options={{ href: null }} />
       </Tabs>
       <QuickCreateLauncher />
     </View>

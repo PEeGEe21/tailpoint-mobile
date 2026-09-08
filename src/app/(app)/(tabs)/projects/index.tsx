@@ -16,85 +16,9 @@ import {
   type ProjectListItem,
 } from '@/features/projects/project-list-row';
 import { ProjectSearchBar } from '@/features/projects/project-search-bar';
+import { LIST_PROJECTS, PINNED_PROJECTS } from '@/features/projects/mock-data';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
-
-// TODO: replace with real data from the API client. Shapes match
-// PinnedProject / ProjectListItem.
-const PINNED_PROJECTS: PinnedProject[] = [
-  {
-    id: 'proj-1',
-    tag: 'Q3 Core Initiative',
-    status: 'on-track',
-    title: 'Mobile Companion',
-    description:
-      'Native companion app for quick approvals, daily tasks, and attention queue.',
-    progressPercent: 68,
-    progressLabel: '12 of 18 tasks',
-    taskCount: 18,
-    milestoneCount: 2,
-    dueLabel: 'Oct 15',
-    avatars: [
-      { initials: 'JD', color: '#006565' },
-      { initials: 'AL', color: '#006399' },
-      { initials: 'RK', color: '#456300' },
-    ],
-    extraCount: 3,
-  },
-  {
-    id: 'proj-2',
-    tag: 'Architecture Migration',
-    status: 'attention',
-    title: 'Core Platform v2',
-    description:
-      'Upgrading foundational API gateway, multi-tenant caching layer, and edge routing.',
-    progressPercent: 84,
-    progressLabel: '27 of 32 tasks',
-    blockerLabel: '1 Blocker',
-    taskCount: 32,
-    dueLabel: 'Sep 30',
-    blocked: true,
-    avatars: [
-      { initials: 'MC', color: '#42B0FF' },
-      { initials: 'SK', color: '#006565' },
-      { initials: 'PL', color: '#76D6D5' },
-    ],
-    extraCount: 3,
-  },
-];
-
-const LIST_PROJECTS: ProjectListItem[] = [
-  {
-    id: 'proj-3',
-    tag: 'Security',
-    updatedLabel: 'Updated 3h ago',
-    title: 'Enterprise SSO & Passkey Support',
-    status: 'on-track',
-    statusLabel: 'On Track',
-    progressPercent: 45,
-    taskCount: 9,
-  },
-  {
-    id: 'proj-4',
-    tag: 'Design Ops',
-    updatedLabel: 'Updated yesterday',
-    title: 'Design System & Token Sync',
-    status: 'review',
-    statusLabel: 'Review',
-    progressPercent: 92,
-    taskCount: 14,
-  },
-  {
-    id: 'proj-5',
-    tag: 'Web-first Core',
-    updatedLabel: 'Updated 4d ago',
-    title: 'Billing & Entitlement Tiering',
-    status: 'paused',
-    statusLabel: 'Paused',
-    progressPercent: 15,
-    taskCount: 6,
-  },
-];
 
 const ARCHIVED_COUNT = 14;
 
@@ -104,31 +28,31 @@ export default function ProjectsScreen() {
   const [activeFilter, setActiveFilter] = useState('active');
 
   const totalCount = PINNED_PROJECTS.length + LIST_PROJECTS.length;
-  const onTrackCount = useMemo(
+  const inProgressCount = useMemo(
     () =>
-      PINNED_PROJECTS.filter((p) => p.status === 'on-track').length +
-      LIST_PROJECTS.filter((p) => p.status === 'on-track').length,
+      PINNED_PROJECTS.filter((p) => p.status === 'in_progress').length +
+      LIST_PROJECTS.filter((p) => p.status === 'in_progress').length,
     [],
   );
-  const attentionCount = useMemo(
+  const reviewCount = useMemo(
     () =>
-      PINNED_PROJECTS.filter((p) => p.status === 'attention').length +
-      LIST_PROJECTS.filter((p) => p.status === 'review').length,
+      PINNED_PROJECTS.filter((p) => p.status === 'on_review').length +
+      LIST_PROJECTS.filter((p) => p.status === 'on_review').length,
     [],
   );
 
   const filterOptions: FilterPillOption[] = [
     { key: 'active', label: 'Active', count: totalCount },
     {
-      key: 'on-track',
-      label: 'On Track',
-      count: onTrackCount,
+      key: 'in_progress',
+      label: 'In progress',
+      count: inProgressCount,
       dotColor: '#14804A',
     },
     {
-      key: 'attention',
-      label: 'Attention',
-      count: attentionCount,
+      key: 'on_review',
+      label: 'In review',
+      count: reviewCount,
       dotColor: '#D97706',
     },
     {
@@ -150,8 +74,9 @@ export default function ProjectsScreen() {
           !project.tag.toLowerCase().includes(query)
         )
           return false;
-        if (activeFilter === 'on-track') return project.status === 'on-track';
-        if (activeFilter === 'attention') return project.status === 'attention';
+        if (activeFilter === 'in_progress')
+          return project.status === 'in_progress';
+        if (activeFilter === 'on_review') return project.status === 'on_review';
         return true;
       }),
     [query, activeFilter],
@@ -166,8 +91,9 @@ export default function ProjectsScreen() {
         !project.tag.toLowerCase().includes(query)
       )
         return false;
-      if (activeFilter === 'on-track') return project.status === 'on-track';
-      if (activeFilter === 'attention') return project.status === 'review';
+      if (activeFilter === 'in_progress')
+        return project.status === 'in_progress';
+      if (activeFilter === 'on_review') return project.status === 'on_review';
       return true;
     });
   }, [query, activeFilter]);

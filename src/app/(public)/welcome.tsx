@@ -6,7 +6,6 @@ import {
   Image,
   Pressable,
   Text,
-  useColorScheme,
   useWindowDimensions,
   View,
   type ImageSourcePropType,
@@ -14,33 +13,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { ArrowRight } from 'lucide-react-native';
-
-const TOKENS = {
-  light: {
-    brand: '#008080',
-    brandPressed: '#006B6B',
-    canvas: '#F6F8FA',
-    surface: '#FFFFFF',
-    textStrong: '#122033',
-    textMuted: '#667085',
-    textLight: '#0E1C2F',
-    border: '#E4E9F0',
-  },
-
-  dark: {
-    brand: '#35B8B2',
-    brandPressed: '#249C97',
-    canvas: '#FFFFFF',
-    // canvas: '#0B1220',
-    surface: '#111B2E',
-    textStrong: '#F5F8FC',
-    textMuted: '#AAB6C8',
-    textLight: '#0E1C2F',
-    border: '#29364B',
-  },
-} as const;
-
-type Tokens = (typeof TOKENS)[keyof typeof TOKENS];
+import { AuthColors, type AuthTheme } from '@/constants/theme';
+import { useEffectiveColorScheme } from '@/hooks/use-theme';
 
 type Slide = {
   key: string;
@@ -74,7 +48,7 @@ function PaginationDots({
   t,
   activeIndex,
 }: {
-  t: Tokens;
+  t: AuthTheme;
   activeIndex: number;
 }) {
   return (
@@ -107,9 +81,8 @@ function PaginationDots({
 
 export default function WelcomeScreen() {
   const router = useRouter();
-  const scheme = useColorScheme();
-
-  const t = TOKENS[scheme === 'dark' ? 'dark' : 'light'];
+  const scheme = useEffectiveColorScheme();
+  const t = AuthColors[scheme];
 
   const { width, height } = useWindowDimensions();
 
@@ -251,7 +224,7 @@ export default function WelcomeScreen() {
                     fontSize: 30,
                     lineHeight: 36,
                     letterSpacing: -0.5,
-                    color: t.textLight,
+                    color: t.textStrong,
                     textAlign: 'center',
                   }}
                 >
@@ -265,7 +238,7 @@ export default function WelcomeScreen() {
                     fontFamily: 'Figtree-Regular',
                     fontSize: 15,
                     lineHeight: 22,
-                    color: t.textLight,
+                    color: t.textStrong,
                     textAlign: 'center',
                   }}
                 >
@@ -339,7 +312,10 @@ export default function WelcomeScreen() {
             Already have an account?
           </Text>
 
-          <Pressable onPress={() => router.push('/(app)/(tabs)')} hitSlop={8}>
+          <Pressable
+            onPress={() => router.push('/(public)/sign-in')}
+            hitSlop={8}
+          >
             {({ pressed }) => (
               <Text
                 style={{

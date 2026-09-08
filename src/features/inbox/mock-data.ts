@@ -1,0 +1,102 @@
+import type { ApprovalItem, NotificationItem } from './types';
+
+export const MOCK_APPROVALS: ApprovalItem[] = [
+  {
+    id: '0aa58e13-c33f-4dd7-b4fa-69cbd5b4e181',
+    projectId: 102,
+    projectTitle: 'Core Platform v2',
+    subjectType: 'task',
+    subjectId: '301',
+    subject: { id: 301, title: 'Review FIDO2 WebAuthn payload format' },
+    status: 'pending',
+    message:
+      'Please confirm the task is ready to move into architecture review.',
+    dueAt: '2026-09-08T18:00:00.000Z',
+    requestedBy: { id: 12, name: 'Amina Lawal' },
+    reviewers: [{ id: 11, name: 'Jordan Davis' }],
+    responses: [],
+    canRespond: true,
+    createdAt: '2026-09-07T11:20:00.000Z',
+  },
+  {
+    id: '24a38b61-e0b9-4ff4-883e-79b6fd076caf',
+    projectId: 101,
+    projectTitle: 'Mobile Companion',
+    subjectType: 'document',
+    subjectId: '44',
+    subject: { id: 44, title: 'Mobile onboarding content guide' },
+    status: 'pending',
+    message: 'Review the final content guide before handoff.',
+    dueAt: '2026-09-09T16:00:00.000Z',
+    requestedBy: { id: 13, name: 'Ravi Kumar' },
+    reviewers: [
+      { id: 11, name: 'Jordan Davis' },
+      { id: 12, name: 'Amina Lawal' },
+    ],
+    responses: [
+      {
+        id: 'response-1',
+        reviewerId: 12,
+        reviewer: {
+          id: 12,
+          name: 'Amina Lawal',
+          email: 'amina@acmestudio.com',
+        },
+        decision: 'approved',
+        comment: null,
+        createdAt: '2026-09-08T09:10:00.000Z',
+      },
+    ],
+    canRespond: true,
+    createdAt: '2026-09-07T14:30:00.000Z',
+  },
+  {
+    id: '6ad15d03-cf4a-4c0b-bae5-e87c31590c27',
+    projectId: 101,
+    projectTitle: 'Mobile Companion',
+    subjectType: 'milestone',
+    subjectId: '18',
+    subject: { id: 18, title: 'Authentication and onboarding' },
+    status: 'approved',
+    message: null,
+    dueAt: '2026-09-06T17:00:00.000Z',
+    requestedBy: { id: 12, name: 'Amina Lawal' },
+    reviewers: [{ id: 11, name: 'Jordan Davis' }],
+    responses: [
+      {
+        id: 'response-2',
+        reviewerId: 11,
+        reviewer: {
+          id: 11,
+          name: 'Jordan Davis',
+          email: 'jordan@acmestudio.com',
+        },
+        decision: 'approved',
+        comment: 'Ready to proceed.',
+        createdAt: '2026-09-06T13:05:00.000Z',
+      },
+    ],
+    canRespond: false,
+    createdAt: '2026-09-05T10:00:00.000Z',
+  },
+];
+export const MOCK_NOTIFICATIONS: NotificationItem[] = [
+  {
+    id: 81,
+    title: 'Approval requested',
+    message: 'Amina Lawal requested your review of a task.',
+    type: 'approval_requested',
+    is_read: false,
+    metadata: { approvalRequestId: MOCK_APPROVALS[0].id, projectId: 102 },
+    created_at: '2026-09-08T12:15:00.000Z',
+  },
+  {
+    id: 82,
+    title: 'Task assigned',
+    message: 'You were assigned to Review FIDO2 WebAuthn payload format.',
+    type: 'task_assigned',
+    is_read: true,
+    metadata: { taskId: 301, projectId: 102 },
+    created_at: '2026-09-08T09:45:00.000Z',
+  },
+];

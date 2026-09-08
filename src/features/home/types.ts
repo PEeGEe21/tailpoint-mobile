@@ -10,7 +10,9 @@ export interface AttentionItem {
   actionLabel: string;
 }
 
-export type ProjectStatus = 'on-track' | 'attention' | 'off-track';
+export type ProjectStatus =
+  'active' | 'in_progress' | 'on_review' | 'paused' | 'completed';
+export type ProjectHealth = 'healthy' | 'at_risk' | 'blocked';
 
 export interface ProjectAvatar {
   initials: string;
@@ -22,6 +24,7 @@ export interface ProjectItem {
   name: string;
   subtitle: string;
   status: ProjectStatus;
+  health?: ProjectHealth;
   progressLabel: string;
   progressPercent: number;
   avatars: ProjectAvatar[];
@@ -30,14 +33,13 @@ export interface ProjectItem {
 }
 
 export type TaskBucket = 'today' | 'upcoming' | 'later';
-export type TaskPriority = 'high' | 'medium' | 'low';
-
 export interface TaskItem {
-  id: string;
+  id: number;
   bucket: TaskBucket;
   category: string;
   title: string;
-  priority: TaskPriority;
+  priority: number;
+  severity: 'low' | 'medium' | 'high' | 'critical' | null;
   dueLabel: string;
   overdue?: boolean;
   blockedBy?: string;
