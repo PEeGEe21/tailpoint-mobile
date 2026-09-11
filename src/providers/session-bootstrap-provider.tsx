@@ -1,12 +1,14 @@
 import { PropsWithChildren, useEffect } from 'react';
 
 import { sessionManager } from '@/auth/runtime-session';
+import { useSessionStore } from '@/auth/session-store';
 
 export function SessionBootstrapProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     void sessionManager.bootstrap().catch(() => {
-      // SessionManager clears invalid credentials. Routing observes the
-      // resulting unauthenticated state; bootstrap errors are not rendered here.
+      // Never leave routing behind a permanent blank bootstrapping state when
+      // platform storage is unavailable or corrupt.
+      useSessionStore.getState().clear();
     });
   }, []);
 

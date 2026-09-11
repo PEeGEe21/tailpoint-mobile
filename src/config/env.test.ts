@@ -3,7 +3,7 @@ import { parsePublicEnvironment } from '@/config/env';
 describe('public environment', () => {
   it('uses safe development defaults', () => {
     expect(parsePublicEnvironment({})).toEqual({
-      apiUrl: 'http://localhost:3000',
+      apiUrl: 'http://localhost:5000',
       appEnvironment: 'development',
     });
   });

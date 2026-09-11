@@ -47,17 +47,20 @@ export function createTailpointApiClient({
   if (refreshAccessToken) {
     client.use({
       async onResponse({ request, response, options }) {
-        if (response.status !== 401) return response;
+        // Returning the original response tells openapi-fetch that middleware
+        // replaced it, which requires a distinct Response instance. Return
+        // nothing when the response should pass through unchanged.
+        if (response.status !== 401) return;
 
         try {
           const accessToken = await refreshAccessToken();
-          if (!accessToken) return response;
+          if (!accessToken) return;
 
           const headers = new Headers(request.headers);
           headers.set('Authorization', `Bearer ${accessToken}`);
           return options.fetch(new Request(request, { headers }));
         } catch {
-          return response;
+          return;
         }
       },
     });

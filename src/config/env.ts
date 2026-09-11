@@ -23,7 +23,7 @@ export function parsePublicEnvironment(
 ) {
   return publicEnvironmentSchema.parse({
     appEnvironment: source.EXPO_PUBLIC_APP_ENV ?? 'development',
-    apiUrl: source.EXPO_PUBLIC_API_URL ?? 'http://localhost:3000',
+    apiUrl: source.EXPO_PUBLIC_API_URL ?? 'http://localhost:5000',
   });
 }
 
