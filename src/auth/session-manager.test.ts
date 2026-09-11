@@ -68,6 +68,31 @@ describe('SessionManager', () => {
     ).resolves.toEqual(['access', 'access', 'access']);
     expect(refresh).toHaveBeenCalledTimes(1);
   });
+  it('restores an account-scoped session without organization context', async () => {
+    const tokenStore = new MemorySecureTokenStore();
+    await tokenStore.setRefreshToken('account-refresh');
+    const contextStore = new MemoryContextStore();
+    contextStore.value = null;
+    const manager = new SessionManager({
+      refresh: jest.fn().mockResolvedValue({
+        accessToken: 'account-access',
+        refreshToken: 'rotated-account-refresh',
+      }),
+      resolveSessionContext: () => ({
+        user: { id: 9, email: 'solo@example.com' },
+      }),
+      tokenStore,
+      contextStore,
+    });
+
+    await expect(manager.bootstrap()).resolves.toBe(true);
+    expect(useSessionStore.getState()).toMatchObject({
+      accessToken: 'account-access',
+      organizationId: null,
+      status: 'workspace-required',
+      user: { id: 9, email: 'solo@example.com' },
+    });
+  });
   it('clears credentials and context when refresh is rejected', async () => {
     const tokenStore = new MemorySecureTokenStore();
     await tokenStore.setRefreshToken('invalid');

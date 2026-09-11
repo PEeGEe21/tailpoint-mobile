@@ -43,3 +43,39 @@ export async function switchActiveOrganization(organizationId: string) {
   });
   return organization;
 }
+
+async function establishWorkspaceFromResponse(data: {
+  user: Record<string, unknown>;
+  organization: Parameters<typeof fromApi>[0];
+  organizationRole?: string;
+  allOrganizations?: Parameters<typeof fromApi>[0][];
+  token: { accessToken: string; refreshToken: string };
+}) {
+  const organization = fromApi(data.organization);
+  const currentUser = useSessionStore.getState().user;
+  if (!currentUser) throw new Error('An authenticated user is required');
+  await sessionManager.establishSession(data.token, {
+    user: currentUser,
+    organization,
+    organizationRole: data.organizationRole ?? organization.role ?? null,
+    organizations: (data.allOrganizations ?? [data.organization]).map(fromApi),
+  });
+  return organization;
+}
+
+export async function createWorkspace(name: string) {
+  const { data, error, response } = await apiClient.POST('/api/organizations', {
+    body: { name: name.trim() },
+  });
+  if (!data) throw normalizeApiError(response.status, error);
+  return establishWorkspaceFromResponse(data);
+}
+
+export async function joinWorkspace(inviteCode: string) {
+  const { data, error, response } = await apiClient.POST(
+    '/api/organizations/join',
+    { body: { invite_code: inviteCode.trim() } },
+  );
+  if (!data) throw normalizeApiError(response.status, error);
+  return establishWorkspaceFromResponse(data);
+}

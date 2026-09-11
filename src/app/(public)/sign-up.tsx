@@ -3,7 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
 import { useForm } from 'react-hook-form';
-import { Progress } from '@/components/ui/primitives';
+import { Field, Progress } from '@/components/ui/primitives';
 import { ThemedText } from '@/components/themed-text';
 import {
   AuthFooter,
@@ -16,7 +16,11 @@ import {
   createOrganizationSchema,
   type CreateOrganizationForm,
 } from '@/features/auth/schemas';
-import { createOrganizationAccount } from '@/auth/auth-api';
+import {
+  createOrganizationAccount,
+  requestSignupEmailVerification,
+  verifySignupEmail,
+} from '@/auth/auth-api';
 import { sessionManager } from '@/auth/runtime-session';
 import { environment } from '@/config/env';
 import { useTheme } from '@/hooks/use-theme';
@@ -32,10 +36,13 @@ const DEFAULT_VALUES: CreateOrganizationForm = {
 
 export default function SignUpScreen() {
   const theme = useTheme();
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [verificationToken, setVerificationToken] = useState('');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const {
     control,
+    getValues,
     handleSubmit,
     trigger,
     formState: { isSubmitting },
@@ -53,16 +60,28 @@ export default function SignUpScreen() {
         'password',
         'confirmPassword',
       ])
-    )
-      setStep(2);
+    ) {
+      try {
+        setSubmitError(null);
+        const values = getValues();
+        await requestSignupEmailVerification(environment.apiUrl, values.email);
+        setStep(2);
+      } catch (error) {
+        setSubmitError(
+          error instanceof Error
+            ? error.message
+            : 'Unable to send verification code.',
+        );
+      }
+    }
   };
   const finish = handleSubmit(async (values) => {
     setSubmitError(null);
     try {
-      const result = await createOrganizationAccount(
-        environment.apiUrl,
-        values,
-      );
+      const result = await createOrganizationAccount(environment.apiUrl, {
+        ...values,
+        verificationToken,
+      });
       await sessionManager.establishSession(result.tokens, result.context);
       router.replace('/(app)/(tabs)');
     } catch (error) {
@@ -79,7 +98,7 @@ export default function SignUpScreen() {
 
   return (
     <AuthShell
-      eyebrow={`Create organization · Step ${step} of 2`}
+      eyebrow={`Create organization · Step ${step} of 3`}
       footer={
         <View style={styles.footerStack}>
           <AuthFooter
@@ -96,11 +115,19 @@ export default function SignUpScreen() {
       subtitle={
         step === 1
           ? 'Start with the account that will administer your new workspace.'
-          : 'Name your workspace. You can invite the rest of your team later.'
+          : step === 2
+            ? 'Enter the six-digit code sent to your email.'
+            : 'Name your workspace. You can invite the rest of your team later.'
       }
-      title={step === 1 ? 'Create your account' : 'Set up your organization'}
+      title={
+        step === 1
+          ? 'Create your account'
+          : step === 2
+            ? 'Verify your email'
+            : 'Set up your organization'
+      }
     >
-      <Progress value={step / 2} />
+      <Progress value={step / 3} />
       {step === 1 ? (
         <>
           <View style={styles.row}>
@@ -146,6 +173,55 @@ export default function SignUpScreen() {
           <AuthPrimaryButton
             label="Continue"
             onPress={() => void continueToOrganization()}
+          />
+        </>
+      ) : step === 2 ? (
+        <>
+          <Field
+            label="Verification code"
+            value={verificationCode}
+            onChangeText={setVerificationCode}
+            keyboardType="number-pad"
+            maxLength={6}
+          />
+          {submitError ? (
+            <ThemedText
+              accessibilityRole="alert"
+              type="small"
+              style={{ color: theme.danger }}
+            >
+              {submitError}
+            </ThemedText>
+          ) : null}
+          <AuthPrimaryButton
+            disabled={verificationCode.length !== 6}
+            label="Verify email"
+            onPress={() => {
+              void (async () => {
+                try {
+                  const values = getValues();
+                  const result = await verifySignupEmail(
+                    environment.apiUrl,
+                    values.email,
+                    verificationCode,
+                  );
+                  if (!result.verificationToken)
+                    throw new Error('Verification failed');
+                  setVerificationToken(result.verificationToken);
+                  setStep(3);
+                } catch (error) {
+                  setSubmitError(
+                    error instanceof Error
+                      ? error.message
+                      : 'Unable to verify email.',
+                  );
+                }
+              })();
+            }}
+          />
+          <AuthLink
+            label="Back to account details"
+            onPress={() => setStep(1)}
           />
         </>
       ) : (

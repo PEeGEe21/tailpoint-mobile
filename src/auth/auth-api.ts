@@ -12,7 +12,8 @@ import { normalizeApiError, type NormalizedApiError } from '@/api/errors';
 
 export type SignInResult =
   | { kind: 'authenticated'; context: SessionContext; tokens: TokenPair }
-  | { kind: 'organization-selection'; organizations: SessionOrganization[] };
+  | { kind: 'organization-selection'; organizations: SessionOrganization[] }
+  | { kind: 'workspace-required'; user: SessionUser; tokens: TokenPair };
 const organizationFromApi = (value: {
   id: string;
   name: string;
@@ -71,6 +72,7 @@ export async function createOrganizationAccount(
     firstName: string;
     lastName: string;
     organizationName: string;
+    verificationToken: string;
   },
 ) {
   const client = createClient<paths>({ baseUrl });
@@ -83,11 +85,39 @@ export async function createOrganizationAccount(
         first_name: input.firstName.trim(),
         last_name: input.lastName.trim(),
         organization_name: input.organizationName.trim(),
+        verification_token: input.verificationToken,
       },
     },
   );
   if (!data) throw apiFailure(response.status, error);
   return signupResult(data);
+}
+
+export async function requestSignupEmailVerification(
+  baseUrl: string,
+  email: string,
+) {
+  const client = createClient<paths>({ baseUrl });
+  const { data, error, response } = await client.POST(
+    '/api/auth/signup/request-email-verification',
+    { body: { email: email.trim().toLowerCase() } },
+  );
+  if (!data) throw apiFailure(response.status, error);
+  return data;
+}
+
+export async function verifySignupEmail(
+  baseUrl: string,
+  email: string,
+  code: string,
+) {
+  const client = createClient<paths>({ baseUrl });
+  const { data, error, response } = await client.POST(
+    '/api/auth/signup/verify-email',
+    { body: { email: email.trim().toLowerCase(), code } },
+  );
+  if (!data) throw apiFailure(response.status, error);
+  return data;
 }
 
 export async function validateInvitation(
@@ -199,6 +229,13 @@ export async function signIn(
       kind: 'organization-selection',
       organizations: data.organizations.map(organizationFromApi),
     };
+  if (!('organization' in data)) {
+    return {
+      kind: 'workspace-required',
+      user: userFromApi(data.user),
+      tokens: data.token,
+    };
+  }
   const organization = organizationFromApi(data.organization);
   return {
     kind: 'authenticated',

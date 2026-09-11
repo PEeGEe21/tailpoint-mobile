@@ -21,6 +21,15 @@ export const sessionManager = new SessionManager({
   refresh: (refreshToken) => refreshSession(environment.apiUrl, refreshToken),
   resolveSessionContext: (accessToken, persisted) => {
     const claims = jwtDecode<AccessTokenClaims>(accessToken);
+    if (!claims.currentOrganizationId) {
+      return {
+        user: {
+          id: Number(claims.sub),
+          email: claims.email,
+          role: claims.role,
+        },
+      };
+    }
     if (
       !persisted ||
       persisted.user.id !== Number(claims.sub) ||

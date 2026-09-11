@@ -55,7 +55,11 @@ function AuthenticatedStack() {
       <Stack.Protected guard={status === 'unauthenticated'}>
         <Stack.Screen name="(public)" />
       </Stack.Protected>
-      <Stack.Protected guard={status === 'selecting-organization'}>
+      <Stack.Protected
+        guard={
+          status === 'selecting-organization' || status === 'workspace-required'
+        }
+      >
         <Stack.Screen name="(onboarding)" />
       </Stack.Protected>
       <Stack.Protected guard={status === 'authenticated'}>

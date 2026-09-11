@@ -1,6 +1,14 @@
 import type { SecureTokenStore } from '@/security/secure-token-store';
 import type { SessionContextStore } from './session-context-store';
-import { useSessionStore, type SessionContext } from './session-store';
+import {
+  useSessionStore,
+  type SessionContext,
+  type SessionUser,
+} from './session-store';
+
+export interface AccountSessionContext {
+  user: SessionUser;
+}
 
 export interface TokenPair {
   accessToken: string;
@@ -11,7 +19,11 @@ export interface SessionManagerOptions {
   resolveSessionContext(
     accessToken: string,
     persisted: SessionContext | null,
-  ): Promise<SessionContext | null> | SessionContext | null;
+  ):
+    | Promise<SessionContext | AccountSessionContext | null>
+    | SessionContext
+    | AccountSessionContext
+    | null;
   tokenStore: SecureTokenStore;
   contextStore: SessionContextStore;
 }
@@ -41,6 +53,13 @@ export class SessionManager {
       this.options.contextStore.set(context),
     ]);
     useSessionStore.getState().setAuthenticated(tokens.accessToken, context);
+  }
+  async establishAccountSession(tokens: TokenPair, user: SessionUser) {
+    await Promise.all([
+      this.options.tokenStore.setRefreshToken(tokens.refreshToken),
+      this.options.contextStore.clear(),
+    ]);
+    useSessionStore.getState().setWorkspaceRequired(tokens.accessToken, user);
   }
   async clearSession() {
     await Promise.all([
@@ -73,7 +92,11 @@ export class SessionManager {
       );
       if (!context)
         throw new Error('Session organization context is unavailable');
-      await this.establishSession(tokens, context);
+      if ('organization' in context) {
+        await this.establishSession(tokens, context);
+      } else {
+        await this.establishAccountSession(tokens, context.user);
+      }
       return tokens.accessToken;
     } catch (error) {
       await this.clearSession();

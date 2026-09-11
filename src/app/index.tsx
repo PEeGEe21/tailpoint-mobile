@@ -7,5 +7,7 @@ export default function IndexRoute() {
   if (status === 'authenticated') return <Redirect href="/(app)/(tabs)" />;
   if (status === 'selecting-organization')
     return <Redirect href="/(onboarding)/choose-workspace" />;
+  if (status === 'workspace-required')
+    return <Redirect href={'/(onboarding)/workspace' as never} />;
   return <Redirect href="/(public)/welcome" />;
 }

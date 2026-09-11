@@ -3,6 +3,7 @@ import {
   joinOrganizationAccount,
   requestPasswordReset,
   resetPassword,
+  signIn,
   validateInvitation,
   verifyPasswordResetCode,
 } from './auth-api';
@@ -41,6 +42,7 @@ describe('auth API', () => {
       firstName: 'Ada',
       lastName: 'Lovelace',
       organizationName: 'Analytical Engines',
+      verificationToken: 'verified-email-proof',
     });
     expect(result.context).toMatchObject({
       user: { id: 7, email: 'ada@example.com' },
@@ -51,6 +53,7 @@ describe('auth API', () => {
       email: 'ada@example.com',
       first_name: 'Ada',
       organization_name: 'Analytical Engines',
+      verification_token: 'verified-email-proof',
     });
   });
   it('validates and accepts an invitation', async () => {
@@ -106,5 +109,23 @@ describe('auth API', () => {
       'https://api.example.com/api/auth/verify-forgot-password-otp',
       'https://api.example.com/api/auth/reset-password',
     ]);
+  });
+  it('maps a zero-membership login to workspace entry', async () => {
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      json({
+        nextStep: 'create_or_join_organization',
+        user: session.user,
+        organizations: [],
+        token: session.token,
+      }),
+    );
+
+    await expect(
+      signIn('https://api.example.com', 'ada@example.com', 'password123'),
+    ).resolves.toEqual({
+      kind: 'workspace-required',
+      user: expect.objectContaining({ id: 7, email: 'ada@example.com' }),
+      tokens: session.token,
+    });
   });
 });

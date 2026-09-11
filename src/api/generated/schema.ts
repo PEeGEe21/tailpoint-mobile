@@ -958,6 +958,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/signup/request-email-verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request or resend a signup email code */
+        post: operations["Auth_requestSignupEmailVerification"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/signup/verify-email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verify a signup email code */
+        post: operations["Auth_verifySignupEmail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/auth/signup/create-organization": {
         parameters: {
             query?: never;
@@ -3627,7 +3661,25 @@ export interface paths {
         /** List organizations for platform administration */
         get: operations["Organizations_findAll"];
         put?: never;
-        post?: never;
+        /** Create another workspace for this account */
+        post: operations["Organizations_createWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/organizations/join": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Join an invited workspace with this account */
+        post: operations["Organizations_joinWorkspace"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5662,6 +5714,39 @@ export interface components {
             /** @example true */
             requiresOrganizationSelection: boolean;
             organizations: components["schemas"]["OrganizationSummaryDto"][];
+            user?: {
+                [key: string]: unknown;
+            };
+            token?: components["schemas"]["TokenPairDto"];
+            /** @example select_organization */
+            nextStep?: string;
+        };
+        WorkspaceRequiredResponseDto: {
+            /** @example create_or_join_organization */
+            nextStep: string;
+            user: {
+                [key: string]: unknown;
+            };
+            organizations: components["schemas"]["OrganizationSummaryDto"][];
+            token: components["schemas"]["TokenPairDto"];
+        };
+        RequestEmailOtpDto: {
+            /** Format: email */
+            email: string;
+        };
+        SignupVerificationResponseDto: {
+            /** @example true */
+            success: boolean;
+            message: string;
+            /** @description Only returned after a valid code is verified */
+            verificationToken?: string;
+            /** @description Development-only code for local testing */
+            debugOtp?: string;
+        };
+        VerifySignupEmailDto: {
+            /** Format: email */
+            email: string;
+            code: string;
         };
         CreateOrganizationDto: {
             /** Format: email */
@@ -5671,6 +5756,8 @@ export interface components {
             first_name: string;
             last_name: string;
             organization_name: string;
+            /** @description One-time proof returned after email verification */
+            verification_token: string;
         };
         SignupSessionResponseDto: {
             user: {
@@ -5731,10 +5818,6 @@ export interface components {
         RefreshTokenRequestDto: {
             /** @description One-time refresh token. A successful refresh rotates it; replay invalidates the session family. */
             refreshToken: string;
-        };
-        RequestEmailOtpDto: {
-            /** Format: email */
-            email: string;
         };
         VerifyForgotPasswordOtpDto: {
             /** Format: email */
@@ -6002,6 +6085,26 @@ export interface components {
             is_public?: boolean;
         };
         UpdateOrgMenuDto: Record<string, never>;
+        CreateWorkspaceDto: {
+            name: string;
+            description?: string | null;
+        };
+        CreateWorkspaceResponseDto: {
+            user: {
+                [key: string]: unknown;
+            };
+            organization: components["schemas"]["OrganizationSummaryDto"];
+            organizationRole?: string;
+            allOrganizations?: components["schemas"]["OrganizationSummaryDto"][];
+            token: components["schemas"]["TokenPairDto"];
+            message?: string;
+            /** @example true */
+            success: boolean;
+        };
+        JoinWorkspaceDto: {
+            invite_token?: string;
+            invite_code?: string;
+        };
         OrganizationContractDto: {
             /** Format: uuid */
             id: string;
@@ -8688,6 +8791,84 @@ export interface operations {
             };
         };
     };
+    Auth_requestSignupEmailVerification: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RequestEmailOtpDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupVerificationResponseDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    Auth_verifySignupEmail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifySignupEmailDto"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignupVerificationResponseDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
     Auth_signUpWithOrganization: {
         parameters: {
             query?: never;
@@ -8831,7 +9012,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuthenticatedSessionResponseDto"] | components["schemas"]["OrganizationSelectionResponseDto"];
+                    "application/json": components["schemas"]["AuthenticatedSessionResponseDto"] | components["schemas"]["OrganizationSelectionResponseDto"] | components["schemas"]["WorkspaceRequiredResponseDto"];
                 };
             };
             400: {
@@ -13996,6 +14177,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrganizationListResponseDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    Organizations_createWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateWorkspaceDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateWorkspaceResponseDto"];
+                };
+            };
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorDto"];
+                };
+            };
+        };
+    };
+    Organizations_joinWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JoinWorkspaceDto"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateWorkspaceResponseDto"];
                 };
             };
             400: {

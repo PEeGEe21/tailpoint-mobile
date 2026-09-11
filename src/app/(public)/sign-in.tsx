@@ -57,6 +57,14 @@ export default function SignInScreen() {
         router.replace('/(onboarding)/choose-workspace');
         return;
       }
+      if (result.kind === 'workspace-required') {
+        await sessionManager.establishAccountSession(
+          result.tokens,
+          result.user,
+        );
+        router.replace('/(onboarding)/workspace' as never);
+        return;
+      }
       await sessionManager.establishSession(result.tokens, result.context);
       router.replace('/(app)/(tabs)');
     } catch (error) {

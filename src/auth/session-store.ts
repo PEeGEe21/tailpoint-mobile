@@ -4,6 +4,7 @@ export type SessionStatus =
   | 'bootstrapping'
   | 'authenticated'
   | 'unauthenticated'
+  | 'workspace-required'
   | 'selecting-organization';
 export interface SessionUser {
   id: number;
@@ -41,6 +42,7 @@ interface SessionState extends Partial<SessionContext> {
     credentials: PendingLogin,
     organizations: SessionOrganization[],
   ) => void;
+  setWorkspaceRequired: (accessToken: string, user: SessionUser) => void;
   setAuthenticated: (accessToken: string, context: SessionContext) => void;
   setBootstrapping: () => void;
 }
@@ -63,6 +65,13 @@ export const useSessionStore = create<SessionState>((set) => ({
       pendingLogin,
       organizations,
       status: 'selecting-organization',
+    }),
+  setWorkspaceRequired: (accessToken, user) =>
+    set({
+      ...cleared,
+      accessToken,
+      status: 'workspace-required',
+      user,
     }),
   setAuthenticated: (accessToken, context) =>
     set({
