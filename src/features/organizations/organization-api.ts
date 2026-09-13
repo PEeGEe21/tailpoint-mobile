@@ -27,7 +27,18 @@ export async function switchActiveOrganization(organizationId: string) {
     '/api/auth/switch-organization',
     { body: { organizationId } },
   );
-  if (!data) throw normalizeApiError(response.status, error);
+  if (!data) {
+    const normalized = normalizeApiError(response.status, error);
+    const message = normalized.message.toLowerCase();
+    if (
+      message.includes('not a member') ||
+      message.includes('not have access') ||
+      message.includes('not active')
+    ) {
+      await sessionManager.removeUnavailableOrganization(organizationId);
+    }
+    throw normalized;
+  }
   const organization = fromApi(data.organization);
   await clearOrganizationQueries(current.organizationId);
   await sessionManager.establishSession(data.token, {
@@ -78,4 +89,45 @@ export async function joinWorkspace(inviteCode: string) {
   );
   if (!data) throw normalizeApiError(response.status, error);
   return establishWorkspaceFromResponse(data);
+}
+
+export async function deleteWorkspace(
+  organizationId: string,
+  confirmationName: string,
+) {
+  const current = useSessionStore.getState();
+  if (!current.user) throw new Error('An authenticated user is required');
+  const { data, error, response } = await apiClient.DELETE(
+    '/api/organizations/{id}',
+    {
+      params: {
+        path: { id: organizationId },
+        header: { 'x-organization-id': organizationId },
+      },
+      body: { confirmationName },
+    },
+  );
+  if (!data) throw normalizeApiError(response.status, error);
+
+  const result = data as {
+    token: { accessToken: string; refreshToken: string };
+    organization: Parameters<typeof fromApi>[0] | null;
+    organizationRole?: string;
+    allOrganizations?: Parameters<typeof fromApi>[0][];
+  };
+  await clearOrganizationQueries(organizationId);
+  if (!result.organization) {
+    await sessionManager.establishAccountSession(result.token, current.user);
+    return null;
+  }
+  const organization = fromApi(result.organization);
+  await sessionManager.establishSession(result.token, {
+    user: current.user,
+    organization,
+    organizationRole: result.organizationRole ?? organization.role ?? null,
+    organizations: (result.allOrganizations ?? [result.organization]).map(
+      fromApi,
+    ),
+  });
+  return organization;
 }

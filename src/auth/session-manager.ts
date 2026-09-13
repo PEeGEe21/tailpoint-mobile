@@ -68,6 +68,27 @@ export class SessionManager {
     ]);
     useSessionStore.getState().clear();
   }
+  async removeUnavailableOrganization(organizationId: string) {
+    const state = useSessionStore.getState();
+    if (
+      !state.accessToken ||
+      !state.user ||
+      !state.organization ||
+      state.organization.id === organizationId
+    ) {
+      return;
+    }
+    const context: SessionContext = {
+      user: state.user,
+      organization: state.organization,
+      organizationRole: state.organizationRole,
+      organizations: state.organizations.filter(
+        (organization) => organization.id !== organizationId,
+      ),
+    };
+    await this.options.contextStore.set(context);
+    useSessionStore.getState().setAuthenticated(state.accessToken, context);
+  }
   refreshAccessToken() {
     if (!this.refreshPromise)
       this.refreshPromise = this.rotateRefreshToken().finally(() => {

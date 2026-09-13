@@ -1,7 +1,15 @@
 import { MaterialIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  TextInput,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { sessionManager } from '@/auth/runtime-session';
@@ -12,7 +20,10 @@ import { Radius, Spacing } from '@/constants/theme';
 import { MOCK_PROFILE_PREFERENCES } from '@/features/profile/mock-data';
 import { useTheme } from '@/hooks/use-theme';
 import { useSessionStore } from '@/auth/session-store';
-import { useSwitchOrganization } from '@/features/organizations/mutations';
+import {
+  useDeleteWorkspace,
+  useSwitchOrganization,
+} from '@/features/organizations/mutations';
 import { clearOrganizationQueries } from '@/api/query-client';
 
 export default function YouScreen() {
@@ -22,6 +33,9 @@ export default function YouScreen() {
   const organizations = useSessionStore((state) => state.organizations);
   const organizationRole = useSessionStore((state) => state.organizationRole);
   const switchOrganization = useSwitchOrganization();
+  const deleteWorkspace = useDeleteWorkspace();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [confirmationName, setConfirmationName] = useState('');
   const profileName =
     [user?.firstName, user?.lastName].filter(Boolean).join(' ') ||
     user?.email ||
@@ -41,6 +55,30 @@ export default function YouScreen() {
     await clearOrganizationQueries(useSessionStore.getState().organizationId);
     await sessionManager.clearSession();
     router.replace('/(public)/welcome');
+  };
+
+  const closeDelete = () => {
+    if (deleteWorkspace.isPending) return;
+    setDeleteOpen(false);
+    setConfirmationName('');
+    deleteWorkspace.reset();
+  };
+
+  const confirmDelete = async () => {
+    if (!organization || confirmationName !== organization.name) return;
+    try {
+      const nextOrganization = await deleteWorkspace.mutateAsync({
+        confirmationName,
+        organizationId: organization.id,
+      });
+      setDeleteOpen(false);
+      setConfirmationName('');
+      if (!nextOrganization) {
+        router.replace('/(onboarding)/workspace' as never);
+      }
+    } catch {
+      // The mutation exposes its normalized error inside the confirmation dialog.
+    }
   };
 
   return (
@@ -149,6 +187,36 @@ export default function YouScreen() {
           </View>
         ) : null}
 
+        {organizationRole === 'org_admin' && organization ? (
+          <>
+            <SectionTitle title="Danger zone" />
+            <Card
+              style={[styles.dangerCard, { borderColor: `${theme.danger}66` }]}
+            >
+              <View style={styles.grow}>
+                <ThemedText style={styles.itemTitle}>
+                  Delete workspace
+                </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Deactivate this workspace and remove it from every member.
+                </ThemedText>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setDeleteOpen(true)}
+                style={[
+                  styles.deleteButton,
+                  { backgroundColor: `${theme.danger}12` },
+                ]}
+              >
+                <ThemedText style={{ color: theme.danger }} type="smallBold">
+                  Delete
+                </ThemedText>
+              </Pressable>
+            </Card>
+          </>
+        ) : null}
+
         <SectionTitle title="Appearance" />
         <Card style={styles.sectionCard}>
           <ThemedText type="small" themeColor="textSecondary">
@@ -217,6 +285,89 @@ export default function YouScreen() {
           Tailpoint v1.0.0
         </ThemedText>
       </ScrollView>
+      <Modal
+        animationType="fade"
+        onRequestClose={closeDelete}
+        transparent
+        visible={deleteOpen}
+      >
+        <View style={styles.modalBackdrop}>
+          <View
+            accessibilityRole="alert"
+            accessibilityViewIsModal
+            style={[
+              styles.deleteDialog,
+              {
+                backgroundColor: theme.backgroundElement,
+                borderColor: theme.border,
+              },
+            ]}
+          >
+            <ThemedText type="subtitle">Delete workspace?</ThemedText>
+            <ThemedText type="small" themeColor="textSecondary">
+              Type {organization?.name ?? 'the workspace name'} to confirm. You
+              will be moved to your next workspace if one is available.
+            </ThemedText>
+            <TextInput
+              accessibilityLabel="Workspace name confirmation"
+              autoCapitalize="words"
+              editable={!deleteWorkspace.isPending}
+              onChangeText={setConfirmationName}
+              placeholder={organization?.name}
+              placeholderTextColor={theme.textSecondary}
+              style={[
+                styles.confirmationInput,
+                { borderColor: theme.border, color: theme.text },
+              ]}
+              value={confirmationName}
+            />
+            {deleteWorkspace.error ? (
+              <ThemedText
+                accessibilityRole="alert"
+                type="small"
+                style={{ color: theme.danger }}
+              >
+                {deleteWorkspace.error instanceof Error
+                  ? deleteWorkspace.error.message
+                  : 'Unable to delete workspace.'}
+              </ThemedText>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              disabled={
+                deleteWorkspace.isPending ||
+                confirmationName !== organization?.name
+              }
+              onPress={() => void confirmDelete()}
+              style={[
+                styles.confirmDeleteButton,
+                {
+                  backgroundColor: theme.danger,
+                  opacity:
+                    confirmationName === organization?.name &&
+                    !deleteWorkspace.isPending
+                      ? 1
+                      : 0.45,
+                },
+              ]}
+            >
+              <ThemedText style={styles.confirmDeleteText}>
+                {deleteWorkspace.isPending
+                  ? 'Deleting workspace…'
+                  : 'Delete workspace'}
+              </ThemedText>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              disabled={deleteWorkspace.isPending}
+              onPress={closeDelete}
+              style={styles.cancelDeleteButton}
+            >
+              <ThemedText type="smallBold">Cancel</ThemedText>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -277,6 +428,43 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
   },
+  dangerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderWidth: 1,
+  },
+  deleteButton: {
+    borderRadius: Radius.medium,
+    paddingHorizontal: Spacing.three,
+    paddingVertical: Spacing.two,
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: Spacing.three,
+    backgroundColor: 'rgba(0, 0, 0, 0.55)',
+  },
+  deleteDialog: {
+    gap: Spacing.three,
+    borderWidth: 1,
+    borderRadius: Radius.large,
+    padding: Spacing.four,
+  },
+  confirmationInput: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    paddingHorizontal: Spacing.three,
+  },
+  confirmDeleteButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: Radius.medium,
+  },
+  confirmDeleteText: { color: '#FFFFFF', fontWeight: '700' },
+  cancelDeleteButton: { alignItems: 'center', padding: Spacing.two },
   itemTitle: { fontSize: 14, lineHeight: 20, fontWeight: '600' },
   sectionCard: { gap: 12 },
   preferenceCard: { paddingVertical: 4, gap: 0 },

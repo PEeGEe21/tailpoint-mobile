@@ -3697,10 +3697,7 @@ export interface paths {
         get: operations["Organizations_findOne"];
         put?: never;
         post?: never;
-        /**
-         * Delete an organization
-         * @deprecated
-         */
+        /** Delete the active workspace as its administrator */
         delete: operations["Organizations_remove"];
         options?: never;
         head?: never;
@@ -6185,6 +6182,10 @@ export interface components {
             success: boolean;
             message: string;
             organization: components["schemas"]["OrganizationContractDto"];
+        };
+        DeleteWorkspaceDto: {
+            /** @description Exact workspace name used as confirmation */
+            confirmationName: string;
         };
         InviteUserDto: {
             /** Format: email */
@@ -14347,20 +14348,29 @@ export interface operations {
     Organizations_remove: {
         parameters: {
             query?: never;
-            header?: never;
+            header: {
+                /** @description Active organization UUID. */
+                "x-organization-id": string;
+            };
             path: {
                 id: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteWorkspaceDto"];
+            };
+        };
         responses: {
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": string;
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             400: {

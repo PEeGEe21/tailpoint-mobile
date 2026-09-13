@@ -39,6 +39,7 @@ export default function SignUpScreen() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [verificationCode, setVerificationCode] = useState('');
   const [verificationToken, setVerificationToken] = useState('');
+  const [sendingCode, setSendingCode] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const {
     control,
@@ -62,6 +63,7 @@ export default function SignUpScreen() {
       ])
     ) {
       try {
+        setSendingCode(true);
         setSubmitError(null);
         const values = getValues();
         await requestSignupEmailVerification(environment.apiUrl, values.email);
@@ -72,6 +74,8 @@ export default function SignUpScreen() {
             ? error.message
             : 'Unable to send verification code.',
         );
+      } finally {
+        setSendingCode(false);
       }
     }
   };
@@ -171,7 +175,8 @@ export default function SignUpScreen() {
             onSubmitEditing={() => void continueToOrganization()}
           />
           <AuthPrimaryButton
-            label="Continue"
+            disabled={sendingCode}
+            label={sendingCode ? 'Sending code…' : 'Continue'}
             onPress={() => void continueToOrganization()}
           />
         </>
@@ -220,8 +225,36 @@ export default function SignUpScreen() {
             }}
           />
           <AuthLink
+            label={sendingCode ? 'Sending another code…' : 'Resend code'}
+            onPress={() => {
+              if (sendingCode) return;
+              void (async () => {
+                setSendingCode(true);
+                setSubmitError(null);
+                try {
+                  await requestSignupEmailVerification(
+                    environment.apiUrl,
+                    getValues().email,
+                  );
+                } catch (error) {
+                  setSubmitError(
+                    error instanceof Error
+                      ? error.message
+                      : 'Unable to resend verification code.',
+                  );
+                } finally {
+                  setSendingCode(false);
+                }
+              })();
+            }}
+          />
+          <AuthLink
             label="Back to account details"
-            onPress={() => setStep(1)}
+            onPress={() => {
+              setVerificationCode('');
+              setVerificationToken('');
+              setStep(1);
+            }}
           />
         </>
       ) : (
@@ -254,10 +287,7 @@ export default function SignUpScreen() {
             }
             onPress={() => void finish()}
           />
-          <AuthLink
-            label="Back to account details"
-            onPress={() => setStep(1)}
-          />
+          <AuthLink label="Back to verification" onPress={() => setStep(2)} />
         </>
       )}
     </AuthShell>

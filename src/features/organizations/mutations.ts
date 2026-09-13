@@ -1,6 +1,18 @@
 import { useMutation } from '@tanstack/react-query';
-import { switchActiveOrganization } from './organization-api';
+import { deleteWorkspace, switchActiveOrganization } from './organization-api';
 
 export function useSwitchOrganization() {
   return useMutation({ mutationFn: switchActiveOrganization });
+}
+
+export function useDeleteWorkspace() {
+  return useMutation({
+    mutationFn: ({
+      confirmationName,
+      organizationId,
+    }: {
+      confirmationName: string;
+      organizationId: string;
+    }) => deleteWorkspace(organizationId, confirmationName),
+  });
 }

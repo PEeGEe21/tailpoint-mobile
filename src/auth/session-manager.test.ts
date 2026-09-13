@@ -104,4 +104,32 @@ describe('SessionManager', () => {
     await expect(tokenStore.getRefreshToken()).resolves.toBeNull();
     expect(useSessionStore.getState().status).toBe('unauthenticated');
   });
+  it('prunes an unavailable inactive organization from persisted context', async () => {
+    const tokenStore = new MemorySecureTokenStore();
+    const contextStore = new MemoryContextStore();
+    const manager = new SessionManager({
+      refresh: jest.fn(),
+      resolveSessionContext: (_token, persisted) => persisted,
+      tokenStore,
+      contextStore,
+    });
+    const sessionContext: SessionContext = {
+      ...context,
+      organizations: [
+        context.organization,
+        { id: 'org-deleted', name: 'Deleted', slug: 'deleted' },
+      ],
+    };
+    await manager.establishSession(
+      { accessToken: 'access', refreshToken: 'refresh' },
+      sessionContext,
+    );
+
+    await manager.removeUnavailableOrganization('org-deleted');
+
+    expect(useSessionStore.getState().organizations).toEqual([
+      context.organization,
+    ]);
+    expect(contextStore.value?.organizations).toEqual([context.organization]);
+  });
 });
