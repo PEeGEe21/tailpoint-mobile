@@ -11,7 +11,17 @@ export interface AttentionItem {
 }
 
 export type ProjectStatus =
-  'active' | 'in_progress' | 'on_review' | 'paused' | 'completed';
+  | 'active'
+  | 'upcoming'
+  | 'in_progress'
+  | 'on_review'
+  | 'inactive'
+  | 'paused'
+  | 'on_hold'
+  | 'completed'
+  | 'cancelled'
+  | 'overdue'
+  | 'draft';
 export type ProjectHealth = 'healthy' | 'at_risk' | 'blocked';
 
 export interface ProjectAvatar {
@@ -32,7 +42,7 @@ export interface ProjectItem {
   updatedLabel: string;
 }
 
-export type TaskBucket = 'today' | 'upcoming' | 'later';
+export type TaskBucket = 'all' | 'today' | 'upcoming' | 'later';
 export interface TaskItem {
   id: number;
   bucket: TaskBucket;
@@ -46,4 +56,6 @@ export interface TaskItem {
   commentCount?: number;
   checklist?: { done: number; total: number };
   completed?: boolean;
+  statusLabel: string;
+  attachmentCount: number;
 }

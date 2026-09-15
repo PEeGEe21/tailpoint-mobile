@@ -69,6 +69,7 @@ const styles = StyleSheet.create({
   track: {
     flexDirection: 'row',
     padding: 4,
+    paddingHorizontal: 16,
     borderRadius: 12,
     gap: 4,
   },

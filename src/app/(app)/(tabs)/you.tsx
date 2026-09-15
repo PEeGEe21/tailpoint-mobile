@@ -26,6 +26,17 @@ import {
 } from '@/features/organizations/mutations';
 import { clearOrganizationQueries } from '@/api/query-client';
 
+const UserRoleEnum = {
+  org_admin: 'Admin',
+  member: 'Member',
+} as const;
+
+const getUserRoleLabel = (role?: string | null) => {
+  const normalizedRole = role && role in UserRoleEnum ? role : 'member';
+
+  return UserRoleEnum[normalizedRole as keyof typeof UserRoleEnum];
+};
+
 export default function YouScreen() {
   const theme = useTheme();
   const user = useSessionStore((state) => state.user);
@@ -113,7 +124,8 @@ export default function YouScreen() {
                 {user?.email}
               </ThemedText>
               <ThemedText style={[styles.role, { color: theme.primary }]}>
-                {organizationRole ?? 'member'}
+                {getUserRoleLabel(organizationRole ?? 'member') ??
+                  getUserRoleLabel('member')}
               </ThemedText>
             </View>
           </View>
@@ -134,14 +146,22 @@ export default function YouScreen() {
               {organization?.name ?? 'Workspace'}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
-              Organization membership · {organizationRole ?? 'member'}
+              Organization membership ·{' '}
+              {getUserRoleLabel(organizationRole ?? 'member') ??
+                getUserRoleLabel('member')}
             </ThemedText>
           </View>
-          <MaterialIcons
-            color={theme.textSecondary}
-            name="chevron-right"
-            size={22}
-          />
+
+          {/* ADD ADMIN WORKSPACE EDIT FEATURES */}
+          {organizationRole === 'org_admin' ? (
+            <Pressable>
+              <MaterialIcons
+                color={theme.textSecondary}
+                name="chevron-right"
+                size={22}
+              />
+            </Pressable>
+          ) : null}
         </Card>
         {organizations.length > 1 ? (
           <View style={styles.workspaceChoices}>
@@ -163,7 +183,8 @@ export default function YouScreen() {
                       Switch to {item.name}
                     </ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
-                      {item.role ?? 'member'}
+                      {getUserRoleLabel(item.role ?? 'member') ??
+                        getUserRoleLabel('member')}
                     </ThemedText>
                   </View>
                   <MaterialIcons
@@ -267,18 +288,25 @@ export default function YouScreen() {
           accessibilityRole="button"
           onPress={() => void signOut()}
           style={({ pressed }) => [
-            styles.signOutButton,
             {
-              backgroundColor: `${theme.danger}12`,
-              borderColor: `${theme.danger}66`,
               opacity: pressed ? 0.7 : 1,
             },
           ]}
         >
-          <MaterialIcons color={theme.danger} name="logout" size={20} />
-          <ThemedText style={[styles.signOutText, { color: theme.danger }]}>
-            Sign out
-          </ThemedText>
+          <View
+            style={[
+              styles.signOutButton,
+              {
+                backgroundColor: `${theme.danger}12`,
+                borderColor: `${theme.danger}66`,
+              },
+            ]}
+          >
+            <MaterialIcons color={theme.danger} name="logout" size={20} />
+            <ThemedText style={[styles.signOutText, { color: theme.danger }]}>
+              Sign out
+            </ThemedText>
+          </View>
         </Pressable>
 
         <ThemedText style={styles.memberSince} themeColor="textSecondary">

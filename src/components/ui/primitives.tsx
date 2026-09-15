@@ -19,22 +19,24 @@ import { useTheme } from '@/hooks/use-theme';
 export function Button({
   children,
   disabled,
+  loading = false,
   ...props
-}: PropsWithChildren<PressableProps>) {
+}: PropsWithChildren<PressableProps & { loading?: boolean }>) {
   const theme = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
-      disabled={disabled}
+      disabled={disabled || loading}
       style={({ pressed }) => [
         styles.button,
         {
           backgroundColor: theme.primary,
-          opacity: disabled ? 0.45 : pressed ? 0.8 : 1,
+          opacity: disabled || loading ? 0.45 : pressed ? 0.8 : 1,
         },
       ]}
       {...props}
     >
+      {loading ? <ActivityIndicator color="#FFFFFF" size="small" /> : null}
       <Text style={styles.buttonText}>{children}</Text>
     </Pressable>
   );

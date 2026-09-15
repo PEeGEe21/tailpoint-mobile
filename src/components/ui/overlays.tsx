@@ -1,4 +1,16 @@
-import { PropsWithChildren, useMemo, useState } from 'react';
+import {
+  PropsWithChildren,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetScrollView,
+} from '@gorhom/bottom-sheet';
 import {
   Modal,
   Pressable,
@@ -27,28 +39,60 @@ export function BottomSheet({
   title,
   visible,
 }: OverlayProps) {
-  const theme = useTheme();
+  if (!visible) return null;
+
   return (
-    <Modal
-      animationType="slide"
-      onRequestClose={onClose}
-      transparent
-      visible={visible}
-    >
-      <Pressable
-        accessibilityLabel="Close sheet"
-        onPress={onClose}
-        style={styles.backdrop}
+    <PresentedBottomSheet onClose={onClose} title={title}>
+      {children}
+    </PresentedBottomSheet>
+  );
+}
+
+function PresentedBottomSheet({
+  children,
+  onClose,
+  title,
+}: Omit<OverlayProps, 'visible'>) {
+  const theme = useTheme();
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const snapPoints = useMemo(() => ['55%', '90%'], []);
+  const renderBackdrop = useCallback(
+    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
       />
-      <ThemedView
-        accessibilityViewIsModal
-        style={[styles.sheet, { borderColor: theme.border }]}
+    ),
+    [],
+  );
+
+  useEffect(() => {
+    sheetRef.current?.present();
+  }, []);
+
+  return (
+    <BottomSheetModal
+      ref={sheetRef}
+      backdropComponent={renderBackdrop}
+      backgroundStyle={{ backgroundColor: theme.backgroundElement }}
+      enableDynamicSizing={false}
+      enablePanDownToClose
+      handleIndicatorStyle={{ backgroundColor: theme.border }}
+      index={0}
+      keyboardBehavior="interactive"
+      onDismiss={onClose}
+      snapPoints={snapPoints}
+    >
+      <BottomSheetScrollView
+        contentContainerStyle={styles.sheet}
+        keyboardShouldPersistTaps="handled"
       >
-        <View style={[styles.handle, { backgroundColor: theme.border }]} />
         <ThemedText type="subtitle">{title}</ThemedText>
         {children}
-      </ThemedView>
-    </Modal>
+      </BottomSheetScrollView>
+    </BottomSheetModal>
   );
 }
 
@@ -100,7 +144,21 @@ export function AlertDialog({
         >
           <ThemedText type="subtitle">{title}</ThemedText>
           <ThemedText themeColor="textSecondary">{body}</ThemedText>
-          <Button onPress={onConfirm}>{confirmLabel}</Button>
+          <Button
+            onPress={onConfirm}
+            style={{
+              width: '100%',
+              height: 52,
+              marginTop: 22,
+              borderRadius: 13,
+              backgroundColor: '#008080',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {confirmLabel}
+          </Button>
           <Pressable
             accessibilityRole="button"
             onPress={onClose}
@@ -116,12 +174,15 @@ export function AlertDialog({
 
 export function Toast({
   message,
+  onDismiss,
   variant = 'error',
 }: {
   message: string;
+  onDismiss?: () => void;
   variant?: 'error' | 'success' | 'neutral';
 }) {
   const theme = useTheme();
+  const [dismissed, setDismissed] = useState(false);
   const backgroundColor =
     variant === 'error'
       ? theme.danger
@@ -135,6 +196,7 @@ export function Toast({
         ? '#FFFFFF'
         : theme.background;
 
+  if (dismissed) return null;
   return (
     <View
       accessible
@@ -143,6 +205,18 @@ export function Toast({
       style={[styles.toast, { backgroundColor }]}
     >
       <Text style={[styles.toastMessage, { color }]}>{message}</Text>
+      <Pressable
+        accessibilityLabel="Dismiss notification"
+        accessibilityRole="button"
+        hitSlop={10}
+        onPress={() => {
+          setDismissed(true);
+          onDismiss?.();
+        }}
+        style={styles.toastDismiss}
+      >
+        <Text style={[styles.toastDismissText, { color }]}>×</Text>
+      </Pressable>
     </View>
   );
 }
@@ -263,25 +337,10 @@ export function MenuItem({
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
   sheet: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    maxHeight: '85%',
-    borderWidth: 1,
-    borderBottomWidth: 0,
-    borderTopLeftRadius: Radius.sheet,
-    borderTopRightRadius: Radius.sheet,
     padding: Spacing.four,
+    paddingBottom: 40,
     gap: Spacing.three,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    alignSelf: 'center',
-    borderRadius: Radius.pill,
   },
   modal: { flex: 1, padding: Spacing.four, gap: Spacing.three },
   centered: {
@@ -299,11 +358,14 @@ const styles = StyleSheet.create({
   cancel: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   toast: {
     position: 'absolute',
-    left: 24,
-    right: 24,
-    bottom: 40,
+    right: Spacing.three,
+    top: Spacing.three,
+    width: 'auto',
+    minWidth: 240,
+    maxWidth: 420,
     borderRadius: Radius.medium,
     padding: Spacing.three,
+    paddingRight: 44,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
     elevation: 8,
@@ -313,6 +375,16 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   toastMessage: { fontSize: 14, lineHeight: 20, fontWeight: '700' },
+  toastDismiss: {
+    position: 'absolute',
+    right: 8,
+    top: 6,
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toastDismissText: { fontSize: 24, lineHeight: 26, fontWeight: '500' },
   select: {
     minHeight: 48,
     justifyContent: 'center',

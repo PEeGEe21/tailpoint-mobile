@@ -1,8 +1,8 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
-import { ArchivedBanner } from '@/features/projects/archived-banner';
 import {
   FilterPills,
   type FilterPillOption,
@@ -16,31 +16,77 @@ import {
   type ProjectListItem,
 } from '@/features/projects/project-list-row';
 import { ProjectSearchBar } from '@/features/projects/project-search-bar';
-import { LIST_PROJECTS, PINNED_PROJECTS } from '@/features/projects/mock-data';
+import { FeedbackState } from '@/components/feedback-state';
+import { queryKeys } from '@/api/query-keys';
+import {
+  createProject,
+  listPinnedProjectIds,
+  listProjects,
+} from '@/features/projects/project-api';
+import {
+  mapPinnedProject,
+  mapProjectListItem,
+} from '@/features/projects/project-mappers';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { useSessionStore } from '@/auth/session-store';
-
-const ARCHIVED_COUNT = 14;
+import { Button, Field } from '@/components/ui/primitives';
+import { BottomSheet, Toast } from '@/components/ui/overlays';
 
 export default function ProjectsScreen() {
   const theme = useTheme();
   const organizationName = useSessionStore((state) => state.organization?.name);
+  const organizationId = useSessionStore((state) => state.organizationId);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState('active');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const createMutation = useMutation({
+    mutationFn: createProject,
+    onSuccess: async (value) => {
+      setCreateOpen(false);
+      setTitle('');
+      setDescription('');
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.projects.all(organizationId ?? 'none'),
+      });
+      const created = value as { id?: number };
+      if (created?.id)
+        router.push(`/projects/${created.id}?saved=created` as never);
+    },
+  });
 
-  const totalCount = PINNED_PROJECTS.length + LIST_PROJECTS.length;
-  const inProgressCount = useMemo(
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects.all(organizationId ?? 'none'),
+    queryFn: () => listProjects(),
+    enabled: Boolean(organizationId),
+  });
+  const pinsQuery = useQuery({
+    queryKey: queryKeys.projects.pinned(organizationId ?? 'none'),
+    queryFn: listPinnedProjectIds,
+    enabled: Boolean(organizationId),
+  });
+  const projects = useMemo(
     () =>
-      PINNED_PROJECTS.filter((p) => p.status === 'in_progress').length +
-      LIST_PROJECTS.filter((p) => p.status === 'in_progress').length,
-    [],
+      (projectsQuery.data ?? []).map((project) => mapProjectListItem(project)),
+    [projectsQuery.data],
+  );
+  const pinnedProjects = useMemo(() => {
+    const ids = new Set(pinsQuery.data ?? []);
+    return (projectsQuery.data ?? [])
+      .filter((project) => ids.has(project.id))
+      .map(mapPinnedProject);
+  }, [pinsQuery.data, projectsQuery.data]);
+  const totalCount = projects.length;
+  const inProgressCount = useMemo(
+    () => projects.filter((p) => p.status === 'in_progress').length,
+    [projects],
   );
   const reviewCount = useMemo(
-    () =>
-      PINNED_PROJECTS.filter((p) => p.status === 'on_review').length +
-      LIST_PROJECTS.filter((p) => p.status === 'on_review').length,
-    [],
+    () => projects.filter((p) => p.status === 'on_review').length,
+    [projects],
   );
 
   const filterOptions: FilterPillOption[] = [
@@ -60,7 +106,7 @@ export default function ProjectsScreen() {
     {
       key: 'pinned',
       label: 'Pinned',
-      count: PINNED_PROJECTS.length,
+      count: pinnedProjects.length,
       icon: 'push-pin',
     },
   ];
@@ -69,7 +115,7 @@ export default function ProjectsScreen() {
 
   const visiblePinned = useMemo(
     () =>
-      PINNED_PROJECTS.filter((project) => {
+      pinnedProjects.filter((project) => {
         if (
           query &&
           !project.title.toLowerCase().includes(query) &&
@@ -81,12 +127,12 @@ export default function ProjectsScreen() {
         if (activeFilter === 'on_review') return project.status === 'on_review';
         return true;
       }),
-    [query, activeFilter],
+    [query, activeFilter, pinnedProjects],
   );
 
   const visibleList = useMemo(() => {
     if (activeFilter === 'pinned') return [];
-    return LIST_PROJECTS.filter((project) => {
+    return projects.filter((project) => {
       if (
         query &&
         !project.title.toLowerCase().includes(query) &&
@@ -98,7 +144,7 @@ export default function ProjectsScreen() {
       if (activeFilter === 'on_review') return project.status === 'on_review';
       return true;
     });
-  }, [query, activeFilter]);
+  }, [query, activeFilter, projects]);
 
   const openProject = (project: ProjectListItem) =>
     router.push(`/projects/${project.id}` as never);
@@ -113,7 +159,24 @@ export default function ProjectsScreen() {
     >
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <ThemedText style={styles.title}>Projects</ThemedText>
+          <View style={styles.titleWithAction}>
+            <ThemedText style={styles.title}>Projects</ThemedText>
+            <TouchableOpacity
+              accessibilityLabel="Create project"
+              accessibilityRole="button"
+              activeOpacity={0.7}
+              hitSlop={12}
+              onPress={() => setCreateOpen(true)}
+              style={[styles.addButton, { backgroundColor: theme.primary }]}
+            >
+              <MaterialIcons
+                color="#FFFFFF"
+                name="add"
+                pointerEvents="none"
+                size={20}
+              />
+            </TouchableOpacity>
+          </View>
           <View
             style={[
               styles.liveHubBadge,
@@ -147,7 +210,25 @@ export default function ProjectsScreen() {
         </View>
       </View>
 
-      {visiblePinned.length > 0 ? (
+      {projectsQuery.isPending ? (
+        <FeedbackState
+          description="Syncing projects from your workspace."
+          title="Loading projects"
+          variant="loading"
+        />
+      ) : projectsQuery.isError ? (
+        <FeedbackState
+          actionLabel="Try again"
+          description="Projects could not be loaded from the workspace."
+          onAction={() => void projectsQuery.refetch()}
+          title="Unable to load projects"
+          variant="error"
+        />
+      ) : null}
+
+      {!projectsQuery.isPending &&
+      !projectsQuery.isError &&
+      visiblePinned.length > 0 ? (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={styles.sectionTitleRow}>
@@ -175,7 +256,9 @@ export default function ProjectsScreen() {
         </View>
       ) : null}
 
-      {activeFilter !== 'pinned' ? (
+      {!projectsQuery.isPending &&
+      !projectsQuery.isError &&
+      activeFilter !== 'pinned' ? (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <ThemedText style={styles.sectionTitle}>
@@ -208,10 +291,51 @@ export default function ProjectsScreen() {
           </View>
         </View>
       ) : null}
+      <BottomSheet
+        onClose={() => setCreateOpen(false)}
+        title="Create project"
+        visible={createOpen}
+      >
+        <Field
+          label="Project title"
+          onChangeText={setTitle}
+          placeholder="e.g. Mobile launch"
+          value={title}
+        />
+        <Field
+          label="Description"
+          multiline
+          onChangeText={setDescription}
+          placeholder="What is this project for?"
+          value={description}
+        />
 
-      <View style={styles.section}>
-        <ArchivedBanner count={ARCHIVED_COUNT} />
-      </View>
+        <Button
+          disabled={!title.trim() || createMutation.isPending}
+          loading={createMutation.isPending}
+          onPress={() =>
+            createMutation.mutate({
+              title: title.trim(),
+              description: description.trim(),
+            })
+          }
+          style={{
+            width: '100%',
+            height: 52,
+            marginTop: 22,
+            borderRadius: 13,
+            backgroundColor: '#008080',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          {createMutation.isPending ? 'Creating…' : 'Create project'}
+        </Button>
+      </BottomSheet>
+      {createMutation.isError ? (
+        <Toast message="Project could not be created." />
+      ) : null}
     </ScrollView>
   );
 }
@@ -230,6 +354,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  titleWithAction: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  addButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 26,

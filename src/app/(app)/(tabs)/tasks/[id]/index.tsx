@@ -1,23 +1,114 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { Button, Card } from '@/components/ui/primitives';
+import { AlertDialog, BottomSheet, Toast } from '@/components/ui/overlays';
+import { FeedbackState } from '@/components/feedback-state';
 import { Radius, Spacing } from '@/constants/theme';
-import { useTaskStore } from '@/features/tasks/task-store';
 import type { TaskSeverity } from '@/features/tasks/types';
-import { PROJECT_WORKFLOW_STATUSES } from '@/features/tasks/mock-data';
 import { useTheme } from '@/hooks/use-theme';
+import {
+  deleteTask,
+  getTask,
+  toggleTaskPriority,
+  updateTaskStatus,
+} from '@/features/tasks/task-api';
+import { mapTask } from '@/features/tasks/task-mappers';
+import { getProject } from '@/features/projects/project-api';
+import { useSessionStore } from '@/auth/session-store';
+import { queryKeys } from '@/api/query-keys';
 
 export default function TaskDetailScreen() {
   const theme = useTheme();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const task = useTaskStore((state) =>
-    state.tasks.find((item) => item.id === Number(id)),
-  );
-  const setStatus = useTaskStore((state) => state.setStatus);
+  const { id, saved } = useLocalSearchParams<{ id: string; saved?: string }>();
+  const organizationId = useSessionStore((state) => state.organizationId);
+  const queryClient = useQueryClient();
+  const [statusSheetOpen, setStatusSheetOpen] = useState(false);
+  const [prioritySheetOpen, setPrioritySheetOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const taskId = Number(id);
+  const taskQuery = useQuery({
+    queryKey: queryKeys.tasks.detail(organizationId ?? 'none', taskId),
+    queryFn: () => getTask(taskId),
+    enabled: Boolean(organizationId && Number.isFinite(taskId)),
+  });
+  const task = taskQuery.data ? mapTask(taskQuery.data) : null;
+  const projectQuery = useQuery({
+    queryKey: queryKeys.projects.detail(
+      organizationId ?? 'none',
+      task?.project.id ?? 0,
+    ),
+    queryFn: () => getProject(task!.project.id),
+    enabled: Boolean(organizationId && task?.project.id),
+  });
+  const projectData =
+    typeof projectQuery.data === 'object' && projectQuery.data !== null
+      ? (projectQuery.data as Record<string, unknown>)
+      : {};
+  const workflowStatuses = Array.isArray(projectData.statuses)
+    ? (projectData.statuses as Record<string, unknown>[])
+    : [];
+  const statusMutation = useMutation({
+    mutationFn: (statusId: number) => updateTaskStatus(taskId, statusId),
+    onSuccess: async () => {
+      setStatusSheetOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.tasks.all(organizationId ?? 'none'),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.tasks.detail(organizationId ?? 'none', taskId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.projects.detail(
+            organizationId ?? 'none',
+            task?.project.id ?? 0,
+          ),
+        }),
+      ]);
+    },
+  });
+  const priorityMutation = useMutation({
+    mutationFn: () => toggleTaskPriority(taskId, task?.priority === 1),
+    onSuccess: async () => {
+      setPrioritySheetOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.tasks.all(organizationId ?? 'none'),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.tasks.detail(organizationId ?? 'none', taskId),
+        }),
+      ]);
+    },
+  });
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteTask(taskId),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.tasks.all(organizationId ?? 'none'),
+      });
+      router.replace('/' as never);
+    },
+  });
+
+  if (taskQuery.isPending)
+    return (
+      <SafeAreaView
+        style={[styles.safe, { backgroundColor: theme.background }]}
+      >
+        <FeedbackState
+          description="Syncing the latest task details."
+          title="Loading task"
+          variant="loading"
+        />
+      </SafeAreaView>
+    );
 
   if (!task)
     return (
@@ -43,7 +134,6 @@ export default function TaskDetailScreen() {
         ? theme.warning
         : theme.success;
   const done = task.status.isTerminal;
-  const workflowStatuses = PROJECT_WORKFLOW_STATUSES[task.project.id];
   const dueLabel = task.due_date
     ? new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(
         new Date(task.due_date),
@@ -99,18 +189,6 @@ export default function TaskDetailScreen() {
             {task.description || 'No description added.'}
           </ThemedText>
         </View>
-        <Button
-          onPress={() =>
-            setStatus(
-              task.id,
-              done
-                ? workflowStatuses[0].id
-                : workflowStatuses.find((status) => status.isTerminal)!.id,
-            )
-          }
-        >
-          {done ? 'Reopen task' : 'Mark as complete'}
-        </Button>
         <Card style={styles.detailsCard}>
           <DetailRow icon="event" label="Due date" value={dueLabel} />
           <Divider />
@@ -125,16 +203,126 @@ export default function TaskDetailScreen() {
           <DetailRow
             icon="radio-button-checked"
             label="Status"
+            onPress={() => setStatusSheetOpen(true)}
             value={task.status.title}
           />
           <Divider />
           <DetailRow
             icon="low-priority"
             label="Priority"
-            value={String(task.priority)}
+            onPress={() => setPrioritySheetOpen(true)}
+            value={task.priority === 1 ? 'High priority' : 'Normal priority'}
           />
         </Card>
+        {task.resources?.length ? (
+          <Card style={styles.resourceCard}>
+            <ThemedText type="smallBold">Attachments</ThemedText>
+            {task.resources.map((resource) => (
+              <View key={resource.id} style={styles.resourceRow}>
+                <MaterialIcons
+                  color={theme.primary}
+                  name="attach-file"
+                  size={19}
+                />
+                <ThemedText numberOfLines={1} style={styles.grow}>
+                  {resource.title}
+                </ThemedText>
+              </View>
+            ))}
+          </Card>
+        ) : null}
+        <Pressable
+          onPress={() => setDeleteOpen(true)}
+          style={[styles.deleteButton, { borderColor: theme.danger }]}
+        >
+          <MaterialIcons color={theme.danger} name="delete-outline" size={20} />
+          <ThemedText style={{ color: theme.danger }} type="smallBold">
+            Delete task
+          </ThemedText>
+        </Pressable>
       </ScrollView>
+      <BottomSheet
+        onClose={() => setStatusSheetOpen(false)}
+        title="Change task status"
+        visible={statusSheetOpen}
+      >
+        {workflowStatuses.map((status) => (
+          <Pressable
+            disabled={statusMutation.isPending}
+            key={String(status.id)}
+            onPress={() => statusMutation.mutate(Number(status.id))}
+            style={[styles.statusChoice, { borderColor: theme.border }]}
+          >
+            <View
+              style={[
+                styles.dot,
+                { backgroundColor: String(status.color ?? theme.primary) },
+              ]}
+            />
+            <ThemedText style={styles.grow}>
+              {String(status.title ?? 'Status')}
+            </ThemedText>
+            {Number(status.id) === task.status.id ? (
+              <MaterialIcons color={theme.primary} name="check" size={20} />
+            ) : null}
+          </Pressable>
+        ))}
+        {!projectQuery.isPending && workflowStatuses.length === 0 ? (
+          <ThemedText themeColor="textSecondary">
+            No workflow statuses are available for this project.
+          </ThemedText>
+        ) : null}
+      </BottomSheet>
+      <BottomSheet
+        onClose={() => setPrioritySheetOpen(false)}
+        title="Change task priority"
+        visible={prioritySheetOpen}
+      >
+        {[
+          { label: 'Normal priority', value: 0 },
+          { label: 'High priority', value: 1 },
+        ].map((option) => (
+          <Pressable
+            disabled={priorityMutation.isPending}
+            key={option.value}
+            onPress={() => {
+              if (option.value === task.priority) setPrioritySheetOpen(false);
+              else priorityMutation.mutate();
+            }}
+            style={[styles.statusChoice, { borderColor: theme.border }]}
+          >
+            <MaterialIcons
+              color={option.value ? theme.danger : theme.textSecondary}
+              name={option.value ? 'priority-high' : 'remove'}
+              size={20}
+            />
+            <ThemedText style={styles.grow}>{option.label}</ThemedText>
+            {option.value === task.priority ? (
+              <MaterialIcons color={theme.primary} name="check" size={20} />
+            ) : null}
+          </Pressable>
+        ))}
+      </BottomSheet>
+      <AlertDialog
+        body={`Delete “${task.title}”? This cannot be undone.`}
+        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete task'}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={() => deleteMutation.mutate()}
+        title="Delete task"
+        visible={deleteOpen}
+      />
+      {statusMutation.isError ? (
+        <Toast message="The task status could not be updated." />
+      ) : null}
+      {priorityMutation.isError ? (
+        <Toast message="The task priority could not be updated." />
+      ) : null}
+      {deleteMutation.isError ? (
+        <Toast message="The task could not be deleted." />
+      ) : null}
+      {saved === '1' ? (
+        <Toast message="Task saved successfully." variant="success" />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -166,10 +354,12 @@ function DetailRow({
   icon,
   label,
   value,
+  onPress,
 }: {
   icon: keyof typeof MaterialIcons.glyphMap;
   label: string;
   value: string;
+  onPress?: () => void;
 }) {
   const theme = useTheme();
   return (
@@ -178,7 +368,17 @@ function DetailRow({
       <ThemedText style={styles.detailLabel} themeColor="textSecondary">
         {label}
       </ThemedText>
-      <ThemedText style={styles.detailValue}>{value}</ThemedText>
+      <Pressable
+        accessibilityRole={onPress ? 'button' : undefined}
+        hitSlop={8}
+        onPress={onPress}
+        style={styles.detailAction}
+      >
+        <ThemedText style={styles.detailValue}>{value}</ThemedText>
+        {onPress ? (
+          <MaterialIcons color={theme.primary} name="edit" size={16} />
+        ) : null}
+      </Pressable>
     </View>
   );
 }
@@ -241,6 +441,22 @@ const styles = StyleSheet.create({
   heroDescription: { color: '#D7E4ED', maxWidth: 330 },
   done: { textDecorationLine: 'line-through', opacity: 0.6 },
   detailsCard: { gap: 0 },
+  resourceCard: { gap: Spacing.two },
+  resourceRow: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deleteButton: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
   detailRow: {
     minHeight: 54,
     flexDirection: 'row',
@@ -249,6 +465,7 @@ const styles = StyleSheet.create({
   },
   detailLabel: { flex: 1, fontSize: 13 },
   detailValue: { fontSize: 13, fontWeight: '600' },
+  detailAction: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   divider: { height: StyleSheet.hairlineWidth },
   sectionTitle: {
     flexDirection: 'row',
@@ -265,6 +482,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   grow: { flex: 1 },
+  statusChoice: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    paddingHorizontal: 12,
+  },
   bold: { fontWeight: '700' },
   missing: {
     flex: 1,

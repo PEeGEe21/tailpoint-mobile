@@ -64,9 +64,11 @@ export interface ProjectTask {
   id: string;
   title: string;
   status: ProjectTaskStatus;
+  isTerminal?: boolean;
   priority: 'low' | 'medium' | 'high';
   dueLabel: string;
   assignee: ProjectMember;
+  attachmentCount?: number;
 }
 
 export interface ProjectMilestone {

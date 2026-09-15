@@ -1,15 +1,41 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import { View, useWindowDimensions } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { QuickCreateLauncher } from '@/components/quick-create-launcher';
 import { useTheme } from '@/hooks/use-theme';
 import { getNavigationPlacement } from '@/navigation/layout';
+import { MessageCircleMore } from 'lucide-react-native';
+import { useQuery } from '@tanstack/react-query';
+import { useSessionStore } from '@/auth/session-store';
+import { queryKeys } from '@/api/query-keys';
+import { listApprovals, listNotifications } from '@/features/inbox/inbox-api';
+import { mapApproval } from '@/features/inbox/inbox-mappers';
 
 export default function TabsLayout() {
   const theme = useTheme();
+  const pathname = usePathname();
   const { width } = useWindowDimensions();
   const tabBarPosition = getNavigationPlacement(width);
   const largeScreen = tabBarPosition === 'left';
+  const isChatThread = /^\/chat\/[^/]+$/.test(pathname);
+  const organizationId = useSessionStore((state) => state.organizationId);
+  const approvalsQuery = useQuery({
+    queryKey: queryKeys.approvals.all(organizationId ?? 'none'),
+    queryFn: listApprovals,
+    enabled: Boolean(organizationId),
+    refetchInterval: 15_000,
+  });
+  const notificationsQuery = useQuery({
+    queryKey: queryKeys.notifications.all(organizationId ?? 'none'),
+    queryFn: listNotifications,
+    enabled: Boolean(organizationId),
+    refetchInterval: 15_000,
+  });
+  const inboxCount =
+    (approvalsQuery.data ?? [])
+      .map(mapApproval)
+      .filter((item) => item.status === 'pending' && item.canRespond).length +
+    (notificationsQuery.data ?? []).filter((item) => !item.is_read).length;
 
   return (
     <View style={{ flex: 1 }}>
@@ -25,6 +51,7 @@ export default function TabsLayout() {
             backgroundColor: theme.backgroundElement,
             borderColor: theme.border,
             width: largeScreen ? 220 : undefined,
+            display: isChatThread && !largeScreen ? 'none' : 'flex',
           },
         }}
       >
@@ -47,12 +74,19 @@ export default function TabsLayout() {
           }}
         />
         <Tabs.Screen
+          name="chat"
+          options={{
+            title: 'Chat',
+            tabBarIcon: ({ color, size }) => (
+              <MessageCircleMore size={size} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="inbox"
           options={{
             title: 'Inbox',
-            // TODO: replace with the live unread count once the inbox feed
-            // is wired up — hardcoded to match the mockup for now.
-            tabBarBadge: 3,
+            tabBarBadge: inboxCount || undefined,
             tabBarIcon: ({ color, size }) => (
               <MaterialIcons color={color} name="inbox" size={size} />
             ),

@@ -3,9 +3,11 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { MaterialIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import * as DocumentPicker from 'expo-document-picker';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useMemo, useState } from 'react';
 import { Controller, useForm, useWatch } from 'react-hook-form';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Platform,
   Pressable,
@@ -20,80 +22,239 @@ import { Button } from '@/components/ui/primitives';
 import { Radius, Spacing } from '@/constants/theme';
 import { FormField } from '@/features/auth/form-field';
 import { useTheme } from '@/hooks/use-theme';
-import {
-  PROJECT_MEMBERS,
-  PROJECT_WORKFLOW_STATUSES,
-  TASK_PROJECTS,
-} from './mock-data';
 import { taskFormSchema, type TaskFormValues } from './schema';
-import { useTaskStore } from './task-store';
+import {
+  createTask,
+  getTask,
+  updateTask,
+  uploadTaskAttachment,
+} from './task-api';
+import { mapTask } from './task-mappers';
+import {
+  getProject,
+  getProjectMembers,
+  listProjects,
+} from '@/features/projects/project-api';
+import { useSessionStore } from '@/auth/session-store';
+import { queryKeys } from '@/api/query-keys';
+import type { ProjectMember } from './types';
+import { BottomSheet, Toast } from '@/components/ui/overlays';
 
-const defaultProjectId = TASK_PROJECTS[0].id;
 const defaults: TaskFormValues = {
   title: '',
   description: '',
-  projectId: defaultProjectId,
+  projectId: 0,
   priority: 2,
   severity: 'medium',
-  statusId: PROJECT_WORKFLOW_STATUSES[defaultProjectId][0].id,
+  statusId: 0,
   dueDate: null,
   assigneeIds: [],
 };
 
 export function TaskFormScreen({ taskId }: { taskId?: string }) {
   const theme = useTheme();
+  const { projectId: routeProjectId } = useLocalSearchParams<{
+    projectId?: string;
+    returnTo?: string;
+  }>();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const numericTaskId = taskId ? Number(taskId) : undefined;
-  const task = useTaskStore((state) =>
-    state.tasks.find((item) => item.id === numericTaskId),
+  const organizationId = useSessionStore((state) => state.organizationId);
+  const queryClient = useQueryClient();
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects.all(organizationId ?? 'none'),
+    queryFn: () => listProjects(),
+    enabled: Boolean(organizationId),
+  });
+  const taskQuery = useQuery({
+    queryKey: queryKeys.tasks.detail(
+      organizationId ?? 'none',
+      numericTaskId ?? 0,
+    ),
+    queryFn: () => getTask(numericTaskId!),
+    enabled: Boolean(organizationId && numericTaskId),
+  });
+  const task = useMemo(
+    () => (taskQuery.data ? mapTask(taskQuery.data) : null),
+    [taskQuery.data],
   );
-  const addTask = useTaskStore((state) => state.addTask);
-  const updateTask = useTaskStore((state) => state.updateTask);
   const [memberQuery, setMemberQuery] = useState('');
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<
+    {
+      uri: string;
+      name: string;
+      mimeType?: string | null;
+    }[]
+  >([]);
   const {
     control,
     handleSubmit,
+    reset,
     setValue,
     formState: { isSubmitting },
   } = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
-    defaultValues: task
-      ? {
-          title: task.title,
-          description: task.description ?? '',
-          projectId: task.project.id,
-          priority: task.priority,
-          severity: task.severity,
-          statusId: task.status.id,
-          dueDate: task.due_date,
-          assigneeIds: task.assignees.map((item) => item.id),
-        }
-      : defaults,
+    defaultValues: defaults,
   });
   const projectId = useWatch({ control, name: 'projectId' });
   const dueDate = useWatch({ control, name: 'dueDate' });
   const assigneeIds = useWatch({ control, name: 'assigneeIds' });
+  const projectQuery = useQuery({
+    queryKey: queryKeys.projects.detail(
+      organizationId ?? 'none',
+      projectId || 0,
+    ),
+    queryFn: () => getProject(projectId),
+    enabled: Boolean(organizationId && projectId),
+  });
+  const membersQuery = useQuery({
+    queryKey: queryKeys.projects.members(
+      organizationId ?? 'none',
+      projectId || 0,
+    ),
+    queryFn: () => getProjectMembers(projectId),
+    enabled: Boolean(organizationId && projectId),
+  });
+  const { projectMembers, workflowStatuses } = useMemo(() => {
+    const overview =
+      typeof projectQuery.data === 'object' && projectQuery.data !== null
+        ? (projectQuery.data as Record<string, unknown>)
+        : {};
+    const statuses = Array.isArray(overview.statuses)
+      ? (overview.statuses as Record<string, unknown>[])
+      : [];
+    const members: ProjectMember[] = (membersQuery.data ?? []).map((value) => {
+      const membership = value as Record<string, unknown>;
+      const member =
+        typeof membership.user === 'object' && membership.user !== null
+          ? (membership.user as Record<string, unknown>)
+          : membership;
+      const name =
+        `${String(member.first_name ?? '')} ${String(member.last_name ?? '')}`.trim() ||
+        String(member.email ?? 'Member');
+      return {
+        id: Number(member.id),
+        name,
+        email: String(member.email ?? ''),
+        initials: name
+          .split(' ')
+          .map((part) => part[0])
+          .join('')
+          .slice(0, 2)
+          .toUpperCase(),
+        role: String(membership.role ?? member.role ?? ''),
+        avatarColor: '#D7E4ED',
+      };
+    });
+    return { projectMembers: members, workflowStatuses: statuses };
+  }, [membersQuery.data, projectQuery.data]);
+  const projects = useMemo(
+    () => projectsQuery.data ?? [],
+    [projectsQuery.data],
+  );
+
+  useEffect(() => {
+    if (task) {
+      reset({
+        title: task.title,
+        description: task.description ?? '',
+        projectId: task.project.id,
+        priority: task.priority,
+        severity: task.severity,
+        statusId: task.status.id,
+        dueDate: task.due_date,
+        assigneeIds: task.assignees.map((item) => item.id),
+      });
+      return;
+    }
+    const requestedProject = Number(routeProjectId);
+    const firstProject = projects[0];
+    if (!numericTaskId && projectId === 0) {
+      if (Number.isFinite(requestedProject) && requestedProject > 0)
+        setValue('projectId', requestedProject);
+      else if (firstProject) setValue('projectId', firstProject.id);
+    }
+  }, [
+    numericTaskId,
+    projectId,
+    projects,
+    reset,
+    routeProjectId,
+    setValue,
+    task,
+  ]);
+
+  useEffect(() => {
+    if (projectId && workflowStatuses.length && !task)
+      setValue('statusId', Number(workflowStatuses[0].id));
+  }, [projectId, setValue, task, workflowStatuses]);
   const members = useMemo(
     () =>
-      PROJECT_MEMBERS.filter((member) =>
+      projectMembers.filter((member) =>
         `${member.name} ${member.email}`
           .toLowerCase()
           .includes(memberQuery.trim().toLowerCase()),
       ),
-    [memberQuery],
+    [memberQuery, projectMembers],
   );
-  const submit = (values: TaskFormValues) => {
-    if (numericTaskId) {
-      updateTask(numericTaskId, values);
-      router.replace(`/tasks/${numericTaskId}` as never);
-      return;
+  const submit = async (values: TaskFormValues) => {
+    setSubmitError(null);
+    const assignees = projectMembers
+      .filter((member) => values.assigneeIds.includes(member.id))
+      .map((member) => member.email)
+      .join(',');
+    const body = {
+      title: values.title,
+      description: values.description,
+      priority: values.priority,
+      severity: values.severity,
+      due_date: values.dueDate,
+      status: values.statusId,
+      assignees,
+    };
+    try {
+      const saved = numericTaskId
+        ? await updateTask(numericTaskId, body)
+        : await createTask(values.projectId, body);
+      const savedId = Number(
+        (saved as { id?: number } | undefined)?.id ?? numericTaskId,
+      );
+      if (!Number.isFinite(savedId))
+        throw new Error('The saved task did not include an ID.');
+      for (const attachment of attachments) {
+        await uploadTaskAttachment(savedId, values.projectId, attachment);
+      }
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.tasks.all(organizationId ?? 'none'),
+      });
+      router.replace(`/tasks/${savedId}?saved=1` as never);
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : 'Task could not be saved.',
+      );
     }
-    router.replace(`/tasks/${addTask(values)}` as never);
   };
   const chooseDate = (_event: DateTimePickerEvent, value?: Date) => {
     if (Platform.OS === 'android') setShowDatePicker(false);
     if (value)
       setValue('dueDate', value.toISOString(), { shouldValidate: true });
+  };
+  const pickAttachment = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      copyToCacheDirectory: true,
+      multiple: true,
+    });
+    if (result.canceled) return;
+    setAttachments((current) => [
+      ...current,
+      ...result.assets.map((file) => ({
+        uri: file.uri,
+        name: file.name,
+        mimeType: file.mimeType,
+      })),
+    ]);
   };
   return (
     <SafeAreaView
@@ -103,7 +264,9 @@ export function TaskFormScreen({ taskId }: { taskId?: string }) {
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
         <Pressable
           accessibilityLabel="Close task form"
-          onPress={() => router.back()}
+          onPress={() =>
+            returnTo ? router.replace(returnTo as never) : router.back()
+          }
           style={styles.iconButton}
         >
           <MaterialIcons color={theme.text} name="close" size={24} />
@@ -148,21 +311,19 @@ export function TaskFormScreen({ taskId }: { taskId?: string }) {
           control={control}
           label="Project"
           name="projectId"
-          options={TASK_PROJECTS.map((item) => ({
+          options={projects.map((item) => ({
             label: item.title,
             value: item.id,
           }))}
-          onSelect={(value) =>
-            setValue('statusId', PROJECT_WORKFLOW_STATUSES[value][0].id)
-          }
+          onSelect={(value) => setValue('statusId', 0)}
         />
         <ChoiceField
           control={control}
           label="Workflow status"
           name="statusId"
-          options={PROJECT_WORKFLOW_STATUSES[projectId].map((item) => ({
-            label: item.title,
-            value: item.id,
+          options={workflowStatuses.map((item) => ({
+            label: String(item.title),
+            value: Number(item.id),
           }))}
         />
         <ChoiceField
@@ -317,13 +478,79 @@ export function TaskFormScreen({ taskId }: { taskId?: string }) {
             )}
           />
         </View>
+        <View style={styles.field}>
+          <ThemedText type="smallBold">Attachments</ThemedText>
+          <Pressable
+            onPress={() => void pickAttachment()}
+            style={[
+              styles.selector,
+              {
+                borderColor: theme.border,
+                backgroundColor: theme.backgroundElement,
+              },
+            ]}
+          >
+            <MaterialIcons color={theme.primary} name="attach-file" size={20} />
+            <ThemedText numberOfLines={1} style={styles.grow}>
+              Choose one or more files
+            </ThemedText>
+          </Pressable>
+          {attachments.map((attachment, index) => (
+            <View
+              key={`${attachment.uri}-${index}`}
+              style={[styles.attachmentRow, { borderColor: theme.border }]}
+            >
+              <MaterialIcons
+                color={theme.primary}
+                name="description"
+                size={18}
+              />
+              <ThemedText numberOfLines={1} style={styles.grow}>
+                {attachment.name}
+              </ThemedText>
+              <Pressable
+                accessibilityLabel="Remove attachment"
+                hitSlop={8}
+                onPress={() =>
+                  setAttachments((current) =>
+                    current.filter((_, itemIndex) => itemIndex !== index),
+                  )
+                }
+              >
+                <MaterialIcons
+                  color={theme.textSecondary}
+                  name="close"
+                  size={20}
+                />
+              </Pressable>
+            </View>
+          ))}
+        </View>
         <Button
           disabled={isSubmitting || assigneeIds.length === 0}
+          loading={isSubmitting}
           onPress={() => void handleSubmit(submit)()}
+          style={{
+            width: '100%',
+            height: 52,
+            marginTop: 22,
+            borderRadius: 13,
+            backgroundColor: '#008080',
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
-          {task ? 'Save changes' : 'Create task'}
+          {isSubmitting
+            ? task
+              ? 'Saving…'
+              : 'Creating…'
+            : task
+              ? 'Save changes'
+              : 'Create task'}
         </Button>
       </ScrollView>
+      {submitError ? <Toast message={submitError} /> : null}
     </SafeAreaView>
   );
 }
@@ -343,6 +570,8 @@ function ChoiceField({
   onSelect?: (value: number) => void;
 }) {
   const theme = useTheme();
+  const [open, setOpen] = useState(false);
+  const useSheet = name === 'projectId' || name === 'statusId';
   return (
     <Controller
       control={control}
@@ -350,41 +579,106 @@ function ChoiceField({
       render={({ field }) => (
         <View style={styles.field}>
           <ThemedText type="smallBold">{label}</ThemedText>
-          <View style={styles.choices}>
-            {options.map((option) => {
-              const selected = field.value === option.value;
-              return (
-                <Pressable
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: selected }}
-                  key={String(option.value)}
-                  onPress={() => {
-                    field.onChange(option.value);
-                    if (typeof option.value === 'number')
-                      onSelect?.(option.value);
-                  }}
-                  style={[
-                    styles.choice,
-                    {
-                      backgroundColor: selected
-                        ? theme.backgroundSelected
-                        : theme.backgroundElement,
-                      borderColor: selected ? theme.primary : theme.border,
-                    },
-                  ]}
-                >
-                  <ThemedText
+          {useSheet ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: open }}
+                onPress={() => setOpen(true)}
+                style={[
+                  styles.selector,
+                  {
+                    backgroundColor: theme.backgroundElement,
+                    borderColor: theme.border,
+                  },
+                ]}
+              >
+                <ThemedText style={styles.selectorText}>
+                  {options.find((option) => option.value === field.value)
+                    ?.label ?? `Choose ${label.toLowerCase()}`}
+                </ThemedText>
+                <MaterialIcons
+                  color={theme.textSecondary}
+                  name="expand-more"
+                  size={20}
+                />
+              </Pressable>
+              <BottomSheet
+                onClose={() => setOpen(false)}
+                title={label}
+                visible={open}
+              >
+                <ScrollView>
+                  {options.map((option) => (
+                    <Pressable
+                      accessibilityRole="radio"
+                      accessibilityState={{
+                        checked: field.value === option.value,
+                      }}
+                      key={String(option.value)}
+                      onPress={() => {
+                        field.onChange(option.value);
+                        if (typeof option.value === 'number')
+                          onSelect?.(option.value);
+                        setOpen(false);
+                      }}
+                      style={[
+                        styles.sheetChoice,
+                        { borderBottomColor: theme.border },
+                      ]}
+                    >
+                      <ThemedText style={styles.grow}>
+                        {option.label}
+                      </ThemedText>
+                      {field.value === option.value ? (
+                        <MaterialIcons
+                          color={theme.primary}
+                          name="check"
+                          size={20}
+                        />
+                      ) : null}
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </BottomSheet>
+            </>
+          ) : (
+            <View style={styles.choices}>
+              {options.map((option) => {
+                const selected = field.value === option.value;
+                return (
+                  <Pressable
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: selected }}
+                    key={String(option.value)}
+                    onPress={() => {
+                      field.onChange(option.value);
+                      if (typeof option.value === 'number')
+                        onSelect?.(option.value);
+                    }}
                     style={[
-                      styles.choiceLabel,
-                      selected && { color: theme.primary },
+                      styles.choice,
+                      {
+                        backgroundColor: selected
+                          ? theme.backgroundSelected
+                          : theme.backgroundElement,
+                        borderColor: selected ? theme.primary : theme.border,
+                      },
                     ]}
                   >
-                    {option.label}
-                  </ThemedText>
-                </Pressable>
-              );
-            })}
-          </View>
+                    <ThemedText
+                      style={[
+                        styles.choiceLabel,
+                        selected && { color: theme.primary },
+                      ]}
+                    >
+                      {option.label}
+                    </ThemedText>
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </View>
       )}
     />
@@ -412,6 +706,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   content: { padding: Spacing.three, paddingBottom: 80, gap: Spacing.three },
+  attachmentRow: {
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   intro: {
     minHeight: 150,
     padding: 20,
@@ -432,7 +735,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   introDescription: { color: '#D7E4ED', fontSize: 14 },
-  textArea: { minHeight: 112, paddingTop: 13 },
+  textArea: { minHeight: 112, paddingTop: 13, width: '100%' },
   field: { gap: Spacing.two },
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   choice: {
@@ -444,6 +747,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   choiceLabel: { fontSize: 13, fontWeight: '600' },
+  sheetChoice: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 4,
+  },
   selector: {
     minHeight: 50,
     borderWidth: 1,

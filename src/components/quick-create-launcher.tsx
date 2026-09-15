@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 
@@ -13,17 +13,25 @@ export function QuickCreateLauncher() {
   const theme = useTheme();
   const pathname = usePathname();
 
-  if (pathname.startsWith('/tasks/')) return null;
+  if (pathname.startsWith('/tasks/') || pathname.startsWith('/chat/'))
+    return null;
   return (
     <>
-      <Pressable
+      <TouchableOpacity
         accessibilityLabel="Open quick create"
         accessibilityRole="button"
+        activeOpacity={0.72}
+        hitSlop={12}
         onPress={() => setVisible(true)}
         style={[styles.launcher, { backgroundColor: theme.primary }]}
       >
-        <ThemedText style={styles.plus}>+</ThemedText>
-      </Pressable>
+        <MaterialIcons
+          color="#FFFFFF"
+          name="add"
+          pointerEvents="none"
+          size={30}
+        />
+      </TouchableOpacity>
       <BottomSheet
         onClose={() => setVisible(false)}
         title="Quick create"
@@ -43,20 +51,27 @@ export function QuickCreateLauncher() {
             },
           ]}
         >
-          <View style={[styles.actionIcon, { backgroundColor: theme.primary }]}>
-            <MaterialIcons color="#FFFFFF" name="add-task" size={21} />
+          <View style={[styles.createActionMainDiv]}>
+            <View style={[styles.createActionDiv]}>
+              <View
+                style={[styles.actionIcon, { backgroundColor: theme.primary }]}
+              >
+                <MaterialIcons color="#FFFFFF" name="add-task" size={21} />
+              </View>
+              <View style={styles.actionText}>
+                <ThemedText type="smallBold">Create task</ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Add work to a project
+                </ThemedText>
+              </View>
+            </View>
+
+            <MaterialIcons
+              color={theme.textSecondary}
+              name="chevron-right"
+              size={22}
+            />
           </View>
-          <View style={styles.actionText}>
-            <ThemedText type="smallBold">Create task</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
-              Add work to a project
-            </ThemedText>
-          </View>
-          <MaterialIcons
-            color={theme.textSecondary}
-            name="chevron-right"
-            size={22}
-          />
         </Pressable>
       </BottomSheet>
     </>
@@ -68,15 +83,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: Spacing.four,
     bottom: 84,
-    zIndex: 10,
+    zIndex: 100,
+    elevation: 12,
     width: 56,
     height: 56,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: Radius.pill,
-    elevation: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
-  plus: { color: '#FFFFFF', fontSize: 28, lineHeight: 32 },
   createAction: {
     minHeight: 68,
     padding: Spacing.two,
@@ -84,6 +102,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.two,
     borderRadius: Radius.medium,
+  },
+  createActionMainDiv: {
+    height: 'auto',
+    padding: Spacing.two,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    borderRadius: Radius.medium,
+  },
+  createActionDiv: {
+    height: 'auto',
+    // padding: Spacing.two,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two,
+    // borderRadius: Radius.medium,
   },
   actionIcon: {
     width: 42,

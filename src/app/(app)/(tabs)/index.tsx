@@ -1,6 +1,14 @@
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  RefreshControl,
+  View,
+} from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { AttentionCard } from '@/features/home/attention-card';
 import { ProjectCard, type ProjectItem } from '@/features/home/project-card';
@@ -9,22 +17,202 @@ import { TaskCard, type TaskBucket } from '@/features/home/task-card';
 import { ThemedText } from '@/components/themed-text';
 import { useTheme } from '@/hooks/use-theme';
 import { router } from 'expo-router';
-import {
-  ATTENTION_ITEMS,
-  PROJECT_ITEMS,
-  TASK_TABS,
-} from '@/features/home/mock-data';
-import { useTaskStore } from '@/features/tasks/task-store';
-import { PROJECT_WORKFLOW_STATUSES } from '@/features/tasks/mock-data';
 import { useSessionStore } from '@/auth/session-store';
+import { deleteTask, listTasks } from '@/features/tasks/task-api';
+import { mapTask } from '@/features/tasks/task-mappers';
+import { queryKeys } from '@/api/query-keys';
+import { listProjects } from '@/features/projects/project-api';
+import { listApprovals } from '@/features/inbox/inbox-api';
+import { mapApproval } from '@/features/inbox/inbox-mappers';
+import { AlertDialog, BottomSheet, Toast } from '@/components/ui/overlays';
+import { FeedbackState } from '@/components/feedback-state';
+
+const TASK_TABS: { key: TaskBucket; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'today', label: 'Today' },
+  { key: 'upcoming', label: 'Upcoming' },
+  { key: 'later', label: 'Later' },
+];
 
 export default function HomeScreen() {
   const theme = useTheme();
+  const queryClient = useQueryClient();
   const user = useSessionStore((state) => state.user);
   const organization = useSessionStore((state) => state.organization);
-  const [activeBucket, setActiveBucket] = useState<TaskBucket>('today');
-  const storedTasks = useTaskStore((state) => state.tasks);
-  const setTaskStatus = useTaskStore((state) => state.setStatus);
+  const organizationId = useSessionStore((state) => state.organizationId);
+  const [activeBucket, setActiveBucket] = useState<TaskBucket>('all');
+  const [taskLimit, setTaskLimit] = useState(8);
+  const [currentTime] = useState(() => Date.now());
+  const [taskMenuId, setTaskMenuId] = useState<number | null>(null);
+  const [deleteTaskId, setDeleteTaskId] = useState<number | null>(null);
+  const [refreshing, setRefreshing] = useState<boolean>(false);
+  const tasksQuery = useQuery({
+    queryKey: queryKeys.tasks.all(organizationId ?? 'none'),
+    queryFn: listTasks,
+    enabled: Boolean(organizationId),
+  });
+  const projectsQuery = useQuery({
+    queryKey: queryKeys.projects.all(organizationId ?? 'none'),
+    queryFn: () => listProjects(),
+    enabled: Boolean(organizationId),
+  });
+  const approvalsQuery = useQuery({
+    queryKey: queryKeys.approvals.all(organizationId ?? 'none'),
+    queryFn: listApprovals,
+    enabled: Boolean(organizationId),
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (taskId: number) => deleteTask(taskId),
+    onSuccess: async () => {
+      setDeleteTaskId(null);
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.tasks.all(organizationId ?? 'none'),
+      });
+    },
+  });
+  const storedTasks = useMemo(
+    () => (tasksQuery.data ?? []).map(mapTask),
+    [tasksQuery.data],
+  );
+
+  console.log(storedTasks, tasksQuery.data);
+  const projectItems: ProjectItem[] = useMemo(
+    () =>
+      (projectsQuery.data ?? [])
+        .filter((project) =>
+          [
+            'active',
+            'upcoming',
+            'in_progress',
+            'on_review',
+            'paused',
+            'on_hold',
+            'overdue',
+          ].includes(String(project.status ?? 'active')),
+        )
+        .slice(0, 6)
+        .map((project) => {
+          const status = [
+            'active',
+            'upcoming',
+            'in_progress',
+            'on_review',
+            'inactive',
+            'paused',
+            'on_hold',
+            'completed',
+            'cancelled',
+            'overdue',
+            'draft',
+          ].includes(String(project.status))
+            ? (project.status as ProjectItem['status'])
+            : 'active';
+          const queriedTasks = storedTasks.filter(
+            (task) => task.project.id === project.id,
+          );
+          const embeddedTasks = Array.isArray(project.tasks)
+            ? project.tasks.map(mapTask)
+            : [];
+          const projectTasks = queriedTasks.length
+            ? queriedTasks
+            : embeddedTasks;
+          const done = projectTasks.filter(
+            (task) => task.status.isTerminal,
+          ).length;
+          const progress = projectTasks.length
+            ? Math.round((done / projectTasks.length) * 100)
+            : 0;
+          const owner =
+            typeof project.user === 'object' && project.user !== null
+              ? (project.user as Record<string, unknown>)
+              : null;
+          const peers = Array.isArray(project.projectPeers)
+            ? project.projectPeers
+            : [];
+          const people = [
+            ...(owner ? [owner] : []),
+            ...peers.map((value) => {
+              const peer = value as Record<string, unknown>;
+              return typeof peer.user === 'object' && peer.user !== null
+                ? (peer.user as Record<string, unknown>)
+                : peer;
+            }),
+          ];
+          const avatars = people.slice(0, 4).map((person) => {
+            const name =
+              `${String(person.first_name ?? '')} ${String(person.last_name ?? '')}`.trim() ||
+              String(person.email ?? '?');
+            return {
+              initials: name
+                .split(' ')
+                .map((part) => part[0])
+                .join('')
+                .slice(0, 2)
+                .toUpperCase(),
+              color: '#D7E4ED',
+            };
+          });
+          return {
+            id: String(project.id),
+            name: project.title,
+            subtitle: project.description ?? 'Workspace project',
+            status,
+            progressLabel: `Progress (${done}/${projectTasks.length} tasks done)`,
+            progressPercent: progress,
+            avatars,
+            extraCount:
+              Math.max(0, people.length - avatars.length) || undefined,
+            updatedLabel: project.updated_at
+              ? `Updated ${new Date(project.updated_at).toLocaleDateString()}`
+              : 'Recently updated',
+          };
+        }),
+    [projectsQuery.data, storedTasks],
+  );
+  const attentionItems = useMemo(() => {
+    const overdue = storedTasks.filter(
+      (task) =>
+        task.due_date &&
+        new Date(task.due_date).getTime() < currentTime &&
+        !task.status.isTerminal,
+    );
+    const approvals = (approvalsQuery.data ?? [])
+      .map(mapApproval)
+      .filter(
+        (approval) => approval.status === 'pending' && approval.canRespond,
+      );
+    return [
+      ...(overdue.length
+        ? [
+            {
+              id: 'overdue-tasks',
+              kind: 'critical' as const,
+              badgeLabel: 'Overdue',
+              meta: 'Needs attention',
+              title: `${overdue.length} overdue ${overdue.length === 1 ? 'task' : 'tasks'}`,
+              subtitle: overdue
+                .slice(0, 2)
+                .map((task) => task.title)
+                .join(' · '),
+              actionLabel: 'Review tasks',
+            },
+          ]
+        : []),
+      ...(approvals.length
+        ? [
+            {
+              id: 'pending-approvals',
+              kind: 'approval' as const,
+              badgeLabel: 'Approval',
+              meta: 'Inbox',
+              title: `${approvals.length} pending ${approvals.length === 1 ? 'approval' : 'approvals'}`,
+              subtitle: approvals[0].subject.title,
+              actionLabel: 'Open inbox',
+            },
+          ]
+        : []),
+    ];
+  }, [approvalsQuery.data, currentTime, storedTasks]);
   const taskItems = useMemo(
     () =>
       storedTasks.map((task) => {
@@ -67,6 +255,8 @@ export default function HomeScreen() {
             due && due.getTime() < start.getTime() && !task.status.isTerminal,
           ),
           completed: task.status.isTerminal,
+          statusLabel: task.status.title,
+          attachmentCount: task.resources?.length ?? 0,
         };
       }),
     [storedTasks],
@@ -76,39 +266,65 @@ export default function HomeScreen() {
     () =>
       TASK_TABS.map((tab) => ({
         ...tab,
-        count: taskItems.filter((task) => task.bucket === tab.key).length,
+        count:
+          tab.key === 'all'
+            ? taskItems.length
+            : taskItems.filter((task) => task.bucket === tab.key).length,
       })),
     [taskItems],
   );
 
   const visibleTasks = useMemo(
-    () => taskItems.filter((task) => task.bucket === activeBucket),
+    () =>
+      activeBucket === 'all'
+        ? taskItems
+        : taskItems.filter((task) => task.bucket === activeBucket),
     [activeBucket, taskItems],
   );
 
-  const toggleComplete = useCallback(
-    (id: number) => {
-      const task = useTaskStore.getState().tasks.find((item) => item.id === id);
-      if (task) {
-        const statuses = PROJECT_WORKFLOW_STATUSES[task.project.id];
-        setTaskStatus(
-          id,
-          task.status.isTerminal
-            ? statuses[0].id
-            : statuses.find((status) => status.isTerminal)!.id,
-        );
-      }
-    },
-    [setTaskStatus],
-  );
+  const toggleComplete = useCallback((id: number) => {
+    router.push(`/tasks/${id}` as never);
+  }, []);
 
   const openProject = (project: ProjectItem) =>
     router.push(`/projects/${project.id}` as never);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        queryClient.refetchQueries({
+          queryKey: queryKeys.projects.all(organizationId ?? 'none'),
+          exact: true,
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.tasks.all(organizationId ?? 'none'),
+          exact: true,
+        }),
+        queryClient.refetchQueries({
+          queryKey: queryKeys.approvals.all(organizationId ?? 'none'),
+          exact: true,
+        }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [organizationId, queryClient]);
 
   return (
     <ScrollView
       contentContainerStyle={styles.scrollContent}
       style={{ backgroundColor: theme.background }}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor="#0EA5E9"
+          colors={['#0EA5E9']}
+          progressBackgroundColor="#F8FAFC"
+          progressViewOffset={20}
+        />
+      }
     >
       <View style={[styles.focusHero, { backgroundColor: theme.ink }]}>
         <View
@@ -149,7 +365,7 @@ export default function HomeScreen() {
         <View style={styles.heroMetrics}>
           <View style={styles.heroMetric}>
             <ThemedText style={styles.heroMetricValue}>
-              {visibleTasks.length}
+              {taskItems.filter((task) => task.bucket === 'today').length}
             </ThemedText>
             <ThemedText style={styles.heroMetricLabel}>Due today</ThemedText>
           </View>
@@ -163,7 +379,7 @@ export default function HomeScreen() {
           <View style={styles.heroMetricDivider} />
           <View style={styles.heroMetric}>
             <ThemedText style={styles.heroMetricValue}>
-              {PROJECT_ITEMS.length}
+              {projectItems.length}
             </ThemedText>
             <ThemedText style={styles.heroMetricLabel}>In flight</ThemedText>
           </View>
@@ -173,36 +389,147 @@ export default function HomeScreen() {
       <Section title="Needs Attention">
         <FlatList
           contentContainerStyle={styles.attentionListContent}
-          data={ATTENTION_ITEMS}
+          data={attentionItems}
           horizontal
           ItemSeparatorComponent={() => <View style={{ width: 10 }} />}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <AttentionCard item={item} />}
+          renderItem={({ item }) => (
+            <AttentionCard
+              item={item}
+              onPress={() => {
+                if (item.kind === 'approval') {
+                  router.push('/inbox' as never);
+                  return;
+                }
+                const overdueTask = storedTasks.find(
+                  (task) =>
+                    task.due_date &&
+                    new Date(task.due_date).getTime() < currentTime &&
+                    !task.status.isTerminal,
+                );
+                if (overdueTask)
+                  router.push(`/tasks/${overdueTask.id}` as never);
+              }}
+            />
+          )}
           showsHorizontalScrollIndicator={false}
         />
       </Section>
 
       <Section title="My Tasks">
+        {tasksQuery.isPending ? (
+          <FeedbackState
+            description="Syncing tasks from this workspace."
+            title="Loading tasks"
+            variant="loading"
+          />
+        ) : tasksQuery.isError ? (
+          <FeedbackState
+            actionLabel="Try again"
+            description={
+              tasksQuery.error instanceof Error
+                ? tasksQuery.error.message
+                : 'Tasks could not be loaded.'
+            }
+            onAction={() => void tasksQuery.refetch()}
+            title="Unable to load tasks"
+            variant="error"
+          />
+        ) : null}
         <SegmentedTabs
           activeKey={activeBucket}
-          onChange={(key) => setActiveBucket(key as TaskBucket)}
+          onChange={(key) => {
+            setActiveBucket(key as TaskBucket);
+            setTaskLimit(8);
+          }}
           tabs={tasksByBucket}
         />
         <View style={styles.taskList}>
-          {visibleTasks.map((task) => (
+          {visibleTasks.slice(0, taskLimit).map((task) => (
             <TaskCard
               item={task}
               key={task.id}
               onPress={(id) => router.push(`/tasks/${id}` as never)}
+              onMenu={setTaskMenuId}
               onToggleComplete={toggleComplete}
             />
           ))}
+          {visibleTasks.length > taskLimit ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setTaskLimit((value) => value + 8)}
+              style={[styles.loadMore, { borderColor: theme.border }]}
+            >
+              <ThemedText type="smallBold">
+                Load more ({visibleTasks.length - taskLimit} remaining)
+              </ThemedText>
+            </Pressable>
+          ) : null}
         </View>
       </Section>
+      <BottomSheet
+        onClose={() => setTaskMenuId(null)}
+        title="Task actions"
+        visible={taskMenuId !== null}
+      >
+        <Pressable
+          onPress={() => {
+            const id = taskMenuId;
+            setTaskMenuId(null);
+            if (id) router.push(`/tasks/${id}/edit` as never);
+          }}
+          style={styles.taskAction}
+        >
+          <MaterialIcons color={theme.primary} name="edit" size={20} />
+          <ThemedText type="smallBold">Edit task</ThemedText>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            setDeleteTaskId(taskMenuId);
+            setTaskMenuId(null);
+          }}
+          style={styles.taskAction}
+        >
+          <MaterialIcons color={theme.danger} name="delete-outline" size={20} />
+          <ThemedText type="smallBold" style={{ color: theme.danger }}>
+            Delete task
+          </ThemedText>
+        </Pressable>
+      </BottomSheet>
+      <AlertDialog
+        body="Delete this task? This cannot be undone."
+        confirmLabel={deleteMutation.isPending ? 'Deleting…' : 'Delete task'}
+        onClose={() => setDeleteTaskId(null)}
+        onConfirm={() => deleteTaskId && deleteMutation.mutate(deleteTaskId)}
+        title="Delete task"
+        visible={deleteTaskId !== null}
+      />
+      {deleteMutation.isError ? (
+        <Toast message="Task could not be deleted." />
+      ) : null}
 
       <Section title="Active Projects">
+        {projectsQuery.isPending ? (
+          <FeedbackState
+            description="Syncing projects from this workspace."
+            title="Loading projects"
+            variant="loading"
+          />
+        ) : projectsQuery.isError ? (
+          <FeedbackState
+            actionLabel="Try again"
+            description={
+              projectsQuery.error instanceof Error
+                ? projectsQuery.error.message
+                : 'Projects could not be loaded.'
+            }
+            onAction={() => void projectsQuery.refetch()}
+            title="Unable to load projects"
+            variant="error"
+          />
+        ) : null}
         <View style={styles.projectList}>
-          {PROJECT_ITEMS.map((project) => (
+          {projectItems.map((project) => (
             <ProjectCard
               item={project}
               key={project.id}
@@ -333,6 +660,20 @@ const styles = StyleSheet.create({
   taskList: {
     paddingHorizontal: 16,
     gap: 10,
+  },
+  loadMore: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taskAction: {
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
   },
   projectList: {
     paddingHorizontal: 16,

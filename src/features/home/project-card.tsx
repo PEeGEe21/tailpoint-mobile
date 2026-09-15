@@ -7,10 +7,16 @@ export type { ProjectAvatar, ProjectItem, ProjectStatus } from './types';
 
 const STATUS_META: Record<ProjectStatus, { color: string; label: string }> = {
   active: { color: '#14804A', label: 'Active' },
+  upcoming: { color: '#006399', label: 'Upcoming' },
   in_progress: { color: '#006399', label: 'In progress' },
   on_review: { color: '#7F56D9', label: 'In review' },
+  inactive: { color: '#667085', label: 'Inactive' },
   paused: { color: '#667085', label: 'Paused' },
+  on_hold: { color: '#D97706', label: 'On hold' },
   completed: { color: '#14804A', label: 'Completed' },
+  cancelled: { color: '#D92D20', label: 'Cancelled' },
+  overdue: { color: '#D92D20', label: 'Overdue' },
+  draft: { color: '#667085', label: 'Draft' },
 };
 
 interface ProjectCardProps {

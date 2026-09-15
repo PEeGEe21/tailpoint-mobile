@@ -1,4 +1,5 @@
 import { MaterialIcons } from '@expo/vector-icons';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import {
   Pressable,
@@ -9,10 +10,24 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
+import { FeedbackState } from '@/components/feedback-state';
+import { BottomSheet, Toast } from '@/components/ui/overlays';
 import { Radius, Spacing } from '@/constants/theme';
-import { MOCK_APPROVALS, MOCK_NOTIFICATIONS } from '@/features/inbox/mock-data';
-import type { ApprovalItem, InboxFilter } from '@/features/inbox/types';
+import {
+  listApprovals,
+  listNotifications,
+  markNotificationRead,
+  respondToApproval,
+} from '@/features/inbox/inbox-api';
+import type {
+  ApprovalItem,
+  InboxFilter,
+  NotificationItem,
+} from '@/features/inbox/types';
 import { useTheme } from '@/hooks/use-theme';
+import { useSessionStore } from '@/auth/session-store';
+import { queryKeys } from '@/api/query-keys';
+import { mapApproval } from '@/features/inbox/inbox-mappers';
 
 const FILTERS: { key: InboxFilter; label: string }[] = [
   { key: 'pending', label: 'Pending' },
@@ -22,10 +37,55 @@ const FILTERS: { key: InboxFilter; label: string }[] = [
 ];
 export default function InboxScreen() {
   const theme = useTheme();
+  const organizationId = useSessionStore((state) => state.organizationId);
+  const userId = useSessionStore((state) => state.user?.id);
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<InboxFilter>('pending');
   const [query, setQuery] = useState('');
-  const [approvals, setApprovals] = useState(MOCK_APPROVALS);
-  const [notifications, setNotifications] = useState(MOCK_NOTIFICATIONS);
+  const [visibleLimit, setVisibleLimit] = useState(20);
+  const [pendingDecision, setPendingDecision] = useState<{
+    approval: ApprovalItem;
+    decision: 'approved' | 'rejected';
+  } | null>(null);
+  const [decisionComment, setDecisionComment] = useState('');
+  const approvalsQuery = useQuery({
+    queryKey: queryKeys.approvals.all(organizationId ?? 'none'),
+    queryFn: listApprovals,
+    enabled: Boolean(organizationId),
+    refetchInterval: 15_000,
+  });
+  const notificationsQuery = useQuery({
+    queryKey: queryKeys.notifications.all(organizationId ?? 'none'),
+    queryFn: listNotifications,
+    enabled: Boolean(organizationId),
+    refetchInterval: 15_000,
+  });
+  const approvals = (approvalsQuery.data ?? []).map(mapApproval);
+  const notifications = (notificationsQuery.data ?? []) as NotificationItem[];
+  const decisionMutation = useMutation({
+    mutationFn: ({ approval, decision }: NonNullable<typeof pendingDecision>) =>
+      respondToApproval(
+        approval.projectId,
+        approval.id,
+        decision,
+        decisionComment.trim() || undefined,
+      ),
+    onSuccess: async () => {
+      setPendingDecision(null);
+      setDecisionComment('');
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.approvals.all(organizationId ?? 'none'),
+      });
+    },
+  });
+  const readMutation = useMutation({
+    mutationFn: markNotificationRead,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.notifications.all(organizationId ?? 'none'),
+      });
+    },
+  });
   const visible = useMemo(
     () =>
       approvals.filter((item) => {
@@ -37,39 +97,21 @@ export default function InboxScreen() {
         if (filter === 'pending')
           return item.status === 'pending' && item.canRespond;
         if (filter === 'decided')
-          return item.responses.some((response) => response.reviewerId === 11);
-        if (filter === 'requested') return item.requestedBy?.id === 11;
+          return item.responses.some(
+            (response) => response.reviewerId === userId,
+          );
+        if (filter === 'requested') return item.requestedBy?.id === userId;
         return false;
       }),
-    [approvals, filter, query],
+    [approvals, filter, query, userId],
   );
-  const decide = (id: string, decision: 'approved' | 'rejected') =>
-    setApprovals((items) =>
-      items.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: decision,
-              canRespond: false,
-              responses: [
-                ...item.responses,
-                {
-                  id: `mock-${Date.now()}`,
-                  reviewerId: 11,
-                  reviewer: {
-                    id: 11,
-                    name: 'Jordan Davis',
-                    email: 'jordan@acmestudio.com',
-                  },
-                  decision,
-                  comment: null,
-                  createdAt: new Date().toISOString(),
-                },
-              ],
-            }
-          : item,
-      ),
-    );
+  const decide = (id: string, decision: 'approved' | 'rejected') => {
+    const approval = approvals.find((item) => item.id === id);
+    if (approval) {
+      setDecisionComment('');
+      setPendingDecision({ approval, decision });
+    }
+  };
   return (
     <SafeAreaView
       edges={['top']}
@@ -117,7 +159,10 @@ export default function InboxScreen() {
           {FILTERS.map((item) => (
             <Pressable
               key={item.key}
-              onPress={() => setFilter(item.key)}
+              onPress={() => {
+                setFilter(item.key);
+                setVisibleLimit(20);
+              }}
               style={[
                 styles.filter,
                 {
@@ -144,18 +189,32 @@ export default function InboxScreen() {
             </Pressable>
           ))}
         </ScrollView>
+        {approvalsQuery.isError || notificationsQuery.isError ? (
+          <FeedbackState
+            actionLabel="Try again"
+            description="Your inbox could not be synchronized."
+            onAction={() => {
+              void approvalsQuery.refetch();
+              void notificationsQuery.refetch();
+            }}
+            title="Unable to load inbox"
+            variant="error"
+          />
+        ) : approvalsQuery.isPending || notificationsQuery.isPending ? (
+          <FeedbackState
+            description="Syncing approvals and notifications."
+            title="Loading inbox"
+            variant="loading"
+          />
+        ) : null}
         {filter === 'notifications' ? (
           <View style={styles.list}>
-            {notifications.map((item) => (
+            {notifications.slice(0, visibleLimit).map((item) => (
               <Pressable
                 key={item.id}
-                onPress={() =>
-                  setNotifications((rows) =>
-                    rows.map((row) =>
-                      row.id === item.id ? { ...row, is_read: true } : row,
-                    ),
-                  )
-                }
+                onPress={() => {
+                  if (!item.is_read) readMutation.mutate(item.id);
+                }}
                 style={[styles.row, { borderBottomColor: theme.border }]}
               >
                 <View
@@ -192,12 +251,24 @@ export default function InboxScreen() {
                 </View>
               </Pressable>
             ))}
+            {notifications.length > visibleLimit ? (
+              <LoadMore
+                count={notifications.length - visibleLimit}
+                onPress={() => setVisibleLimit((value) => value + 20)}
+              />
+            ) : null}
           </View>
         ) : (
           <View style={styles.list}>
-            {visible.map((item) => (
+            {visible.slice(0, visibleLimit).map((item) => (
               <ApprovalRow item={item} key={item.id} onDecision={decide} />
             ))}
+            {visible.length > visibleLimit ? (
+              <LoadMore
+                count={visible.length - visibleLimit}
+                onPress={() => setVisibleLimit((value) => value + 20)}
+              />
+            ) : null}
             {visible.length === 0 ? (
               <ThemedText style={styles.empty} themeColor="textSecondary">
                 Nothing in this view.
@@ -206,7 +277,60 @@ export default function InboxScreen() {
           </View>
         )}
       </ScrollView>
+      <BottomSheet
+        onClose={() => {
+          setPendingDecision(null);
+          setDecisionComment('');
+        }}
+        title={`${pendingDecision?.decision === 'approved' ? 'Approve' : 'Reject'} request?`}
+        visible={Boolean(pendingDecision)}
+      >
+        <ThemedText themeColor="textSecondary">
+          {pendingDecision?.approval.subject.title}
+        </ThemedText>
+        <TextInput
+          accessibilityLabel="Decision comment"
+          multiline
+          onChangeText={setDecisionComment}
+          placeholder={
+            pendingDecision?.decision === 'rejected'
+              ? 'Explain why this request is being rejected'
+              : 'Add an optional comment'
+          }
+          placeholderTextColor={theme.textSecondary}
+          style={[
+            styles.commentInput,
+            { borderColor: theme.border, color: theme.text },
+          ]}
+          value={decisionComment}
+        />
+        <Pressable
+          disabled={decisionMutation.isPending}
+          onPress={() => {
+            if (pendingDecision) decisionMutation.mutate(pendingDecision);
+          }}
+          style={[styles.sheetAction, { backgroundColor: theme.primary }]}
+        >
+          <ThemedText style={styles.actionPrimary}>
+            {decisionMutation.isPending ? 'Saving...' : 'Confirm decision'}
+          </ThemedText>
+        </Pressable>
+      </BottomSheet>
+      {decisionMutation.isError ? (
+        <Toast message="The approval decision could not be saved." />
+      ) : null}
     </SafeAreaView>
+  );
+}
+function LoadMore({ count, onPress }: { count: number; onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.loadMore, { borderColor: theme.border }]}
+    >
+      <ThemedText type="smallBold">Load more ({count} remaining)</ThemedText>
+    </Pressable>
   );
 }
 function ApprovalRow({
@@ -328,6 +452,13 @@ const styles = StyleSheet.create({
   },
   filterText: { fontSize: 12, fontWeight: '700' },
   list: { gap: 10 },
+  loadMore: {
+    minHeight: 44,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   approval: { borderWidth: 1, borderRadius: Radius.large, padding: 16, gap: 8 },
   between: {
     flexDirection: 'row',
@@ -353,6 +484,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   actionPrimary: { color: '#FFFFFF', fontWeight: '700' },
+  sheetAction: {
+    minHeight: 48,
+    borderRadius: Radius.medium,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  commentInput: {
+    minHeight: 88,
+    borderWidth: 1,
+    borderRadius: Radius.medium,
+    padding: 12,
+    textAlignVertical: 'top',
+  },
   row: {
     flexDirection: 'row',
     gap: 12,

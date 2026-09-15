@@ -18,6 +18,7 @@ interface TaskCardProps {
   onPress?: (id: number) => void;
   onToggleComplete: (id: number) => void;
   onResolve?: (id: number) => void;
+  onMenu?: (id: number) => void;
 }
 
 export function TaskCard({
@@ -25,6 +26,7 @@ export function TaskCard({
   onPress,
   onToggleComplete,
   onResolve,
+  onMenu,
 }: TaskCardProps) {
   const theme = useTheme();
   const severityColor = item.severity
@@ -93,6 +95,28 @@ export function TaskCard({
                 </ThemedText>
               </View>
             ) : null}
+            <View
+              style={[
+                styles.statusTag,
+                { backgroundColor: theme.backgroundSelected },
+              ]}
+            >
+              <ThemedText style={styles.statusLabel}>
+                {item.statusLabel}
+              </ThemedText>
+            </View>
+            {item.attachmentCount > 0 ? (
+              <View style={styles.attachmentTag}>
+                <MaterialIcons
+                  color={theme.textSecondary}
+                  name="attach-file"
+                  size={13}
+                />
+                <ThemedText type="small" themeColor="textSecondary">
+                  {item.attachmentCount}
+                </ThemedText>
+              </View>
+            ) : null}
           </View>
 
           <ThemedText
@@ -153,11 +177,17 @@ export function TaskCard({
             <MaterialIcons color={theme.text} name="chevron-right" size={15} />
           </Pressable>
         ) : (
-          <MaterialIcons
-            color={theme.textSecondary}
-            name="more-vert"
-            size={18}
-          />
+          <Pressable
+            accessibilityLabel="Task actions"
+            hitSlop={10}
+            onPress={() => onMenu?.(item.id)}
+          >
+            <MaterialIcons
+              color={theme.textSecondary}
+              name="more-vert"
+              size={18}
+            />
+          </Pressable>
         )}
       </View>
     </View>
@@ -225,6 +255,13 @@ const styles = StyleSheet.create({
     color: '#14804A',
     fontWeight: '500',
   },
+  statusTag: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  statusLabel: { fontSize: 11, fontWeight: '600' },
+  attachmentTag: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   title: {
     fontSize: 15,
     fontWeight: '600',

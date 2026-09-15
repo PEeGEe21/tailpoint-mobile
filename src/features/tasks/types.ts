@@ -26,4 +26,11 @@ export interface Task {
   status: WorkflowStatus;
   assignees: ProjectMember[];
   project: { id: number; title: string };
+  resources?: {
+    id: number;
+    title: string;
+    url: string | null;
+    mimeType: string | null;
+    fileSize: number | null;
+  }[];
 }
