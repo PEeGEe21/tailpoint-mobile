@@ -1,28 +1,24 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PropsWithChildren, useState } from 'react';
-
+import { QueryClientProvider } from '@tanstack/react-query';
+import { PropsWithChildren } from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { RuntimeStateProvider } from '@/providers/runtime-state-provider';
+import { SessionBootstrapProvider } from '@/providers/session-bootstrap-provider';
+import { queryClient } from '@/api/query-client';
 
 export function AppProviders({ children }: PropsWithChildren) {
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          queries: {
-            retry: 1,
-            staleTime: 30_000,
-            refetchOnWindowFocus: false,
-          },
-          mutations: {
-            retry: false,
-          },
-        },
-      }),
-  );
-
   return (
-    <QueryClientProvider client={queryClient}>
-      <RuntimeStateProvider>{children}</RuntimeStateProvider>
-    </QueryClientProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <QueryClientProvider client={queryClient}>
+        <SafeAreaProvider>
+          <BottomSheetModalProvider>
+            <RuntimeStateProvider>
+              <SessionBootstrapProvider>{children}</SessionBootstrapProvider>
+            </RuntimeStateProvider>
+          </BottomSheetModalProvider>
+        </SafeAreaProvider>
+      </QueryClientProvider>
+    </GestureHandlerRootView>
   );
 }
